@@ -20,19 +20,27 @@
             android:layout_height="match_parent"
             android:orientation="vertical">
 
+
             <TextView
                 android:id="@+id/psdsIdLabel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Please enter your ID:" />
 
-            <TextView
-                android:id="@+id/psdsIdentifier"
+
+            <EditText
+                android:id="@+id/studyId"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:editable="true"
-                android:hint="Study ID..."
-                tools:visibility="visible" />
+                android:hint="Study ID..." />
+
+            <!--<TextView-->
+                <!--android:id="@+id/studyId"-->
+                <!--android:layout_width="match_parent"-->
+                <!--android:layout_height="wrap_content"-->
+                <!--android:editable="true"-->
+                <!--android:hint="Study ID..."-->
+                <!--tools:visibility="visible" />-->
 
             <Space
                 android:layout_width="match_parent"

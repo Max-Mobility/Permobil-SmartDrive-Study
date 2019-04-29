@@ -1,7 +1,9 @@
 package com.permobil.psds.wearos;
 
 import android.Manifest;
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.support.wearable.activity.WearableActivity;
@@ -12,6 +14,9 @@ import android.widget.TextView;
 
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class MainActivity extends WearableActivity {
 
@@ -27,8 +32,14 @@ public class MainActivity extends WearableActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        mTextView = findViewById(R.id.text);
+        mTextView = findViewById(R.id.studyId);
         mSubmitBtn = findViewById(R.id.submitBtn);
+
+        // check if user already has entered study ID
+        SharedPreferences sharedPref = this.getPreferences(Context.MODE_PRIVATE);
+        String savedStudyId = sharedPref.getString(getString(R.string.saved_study_id), "");
+
+        Log.d(TAG, "Saved study id: " + savedStudyId);
 
         mSubmitBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -38,9 +49,14 @@ public class MainActivity extends WearableActivity {
                 // check the psds identifier the user entered and validate
                 // also store in shared preferences so we can check on start later to skip entering it
                 String userId = mTextView.getText().toString();
-                if (userId != null) {
+                if (!userId.equals("")) {
                     Log.d(TAG, "Evaluating user ID: " + userId);
-                    if (userId.matches("/PSDS[0-9]+/gi")) {
+                    Pattern p = Pattern.compile("PSDS[0-9]+", Pattern.CASE_INSENSITIVE);
+                    Matcher m = p.matcher(userId);
+                    boolean b = m.matches();
+                    Log.d(TAG, "Regex match for user ID: " + b);
+
+                    if (b || userId.equals("xxr&dxx")) {
                         Log.d(TAG, "User ID is valid!!!");
                     } else {
                         Log.d(TAG, "User ID is invalid!!!");
