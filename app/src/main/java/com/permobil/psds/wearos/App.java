@@ -20,7 +20,7 @@ public class App extends Application {
     public void onCreate() {
         super.onCreate();
         sharedClient = new Client.Builder(this).build();
-//        sharedClient.enableDebugLogging();
+        sharedClient.enableDebugLogging();
 
         // check the kinvey client has active user
         boolean isLoggedIn = sharedClient.isUserLoggedIn();

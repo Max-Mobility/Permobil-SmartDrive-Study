@@ -7,15 +7,50 @@ import com.google.api.client.json.GenericJson;
 import com.google.api.client.util.Key;
 
 import java.util.ArrayList;
-import java.util.List;
 
 public class PSDSData extends GenericJson {
 
-    @Key
-    public ArrayList<SensorServiceData> sensor_data;
+    public static class SensorData extends GenericJson {
+        /**
+         * Sensor type as int.
+         */
+        @Key
+        public int s;
+
+        /**
+         * Sensor event timestamp.
+         */
+        @Key
+        public long ts;
+
+        /**
+         * Returns the seconds since Epoch
+         */
+        @Key
+        public long t;
+
+
+        /**
+         * Hashmap for storing the sensor data.
+         */
+        @Key
+        public ArrayList<Float> d;
+
+        // anything extending GernericJson must have empty constructor
+        public SensorData() {
+            this.t = System.currentTimeMillis() / 1000;
+        }
+
+        public SensorData(int s, long ts, ArrayList<Float> d) {
+            this.s = s;
+            this.t = System.currentTimeMillis() / 1000;
+            this.ts = ts;
+            this.d = d;
+        }
+    }
 
     @Key
-    public List<Sensor> sensor_list;
+    public ArrayList<Sensor> sensor_list;
 
     @Key
     public String device_manufacturer;
@@ -43,7 +78,6 @@ public class PSDSData extends GenericJson {
         this.device_model = Build.MODEL;
         this.device_os_version = Build.VERSION.RELEASE;
         this.device_sdk_version = Build.VERSION.SDK_INT;
-
     }
 
 

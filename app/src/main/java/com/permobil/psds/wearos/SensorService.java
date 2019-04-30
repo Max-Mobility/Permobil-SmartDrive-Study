@@ -67,7 +67,7 @@ public class SensorService extends Service {
     private Sensor mProximity;
     private Sensor mOffBodyDetect;
 
-    public static ArrayList<SensorServiceData> sensorServiceDataList = new ArrayList<>();
+    public static ArrayList<PSDSData.SensorData> sensorServiceDataList = new ArrayList<>();
 
     public SensorService() {
     }
@@ -144,7 +144,7 @@ public class SensorService extends Service {
             @Override
             public void run() {
                 _writeAndUpload();
-                mHandler.postDelayed(mHandlerTask, 60 * 1000);
+                mHandler.postDelayed(mHandlerTask, 10 * 1000);
             }
         };
 
@@ -167,8 +167,9 @@ public class SensorService extends Service {
 
         // BRAD - thinking that the GC messages are about the static arraylist and retaining sensor data
         Log.d(TAG, "ServiceDataList size: " + sensorServiceDataList.size());
-        data.sensor_data = SensorService.sensorServiceDataList;
-        Log.d(TAG, "PSDSData sensor_data values: " + data.sensor_data);
+        data.set("sensor_data", sensorServiceDataList);
+//        data.sensor_data = SensorService.sensorServiceDataList;
+//        Log.d(TAG, "PSDSData sensor_data values: " + data.sensor_data);
         SensorService.sensorServiceDataList = new ArrayList<>();
 //        data.sensor_list = mSensorManager.getSensorList(Sensor.TYPE_ALL);
         data.user_identifier = this.userIdentifier;
@@ -253,6 +254,9 @@ public class SensorService extends Service {
             if (mListener != null) {
                 GenericJson sensorData = new GenericJson();
 
+//                Float[] dataArray = new Float[];
+                ArrayList<Float> dataList = new ArrayList<>();
+
                 int sensorType = event.sensor.getType();
                 // depending on the the sensor type set the result to return in the listener
                 if (sensorType == Sensor.TYPE_ACCELEROMETER
@@ -260,36 +264,60 @@ public class SensorService extends Service {
                         || sensorType == Sensor.TYPE_GRAVITY
                         || sensorType == Sensor.TYPE_GYROSCOPE
                         || sensorType == Sensor.TYPE_MAGNETIC_FIELD) {
-                    sensorData.set("x", event.values[0]);
-                    sensorData.set("y", event.values[1]);
-                    sensorData.set("z", event.values[2]);
+//                    dataArray.add
+                    dataList.add(event.values[0]);
+                    dataList.add(event.values[1]);
+                    dataList.add(event.values[2]);
+//                    sensorData.set("x", event.values[0]);
+//                    sensorData.set("y", event.values[1]);
+//                    sensorData.set("z", event.values[2]);
                 } else if (sensorType == Sensor.TYPE_ROTATION_VECTOR) {
-                    sensorData.set("x", event.values[0]);
-                    sensorData.set("y", event.values[1]);
-                    sensorData.set("z", event.values[2]);
-                    sensorData.set("cos", event.values[3]);
-                    sensorData.set("heading_accuracy", event.values[4]);
+                    dataList.add(event.values[0]);
+                    dataList.add(event.values[1]);
+                    dataList.add(event.values[2]);
+                    dataList.add(event.values[3]);
+                    dataList.add(event.values[4]);
+
+//                    sensorData.set("x", event.values[0]);
+//                    sensorData.set("y", event.values[1]);
+//                    sensorData.set("z", event.values[2]);
+//                    sensorData.set("cos", event.values[3]);
+//                    sensorData.set("heading_accuracy", event.values[4]);
                 } else if (sensorType == Sensor.TYPE_GAME_ROTATION_VECTOR) {
-                    sensorData.set("x", event.values[0]);
-                    sensorData.set("y", event.values[1]);
-                    sensorData.set("z", event.values[2]);
-                    sensorData.set("cos", event.values[3]);
+                    dataList.add(event.values[0]);
+                    dataList.add(event.values[1]);
+                    dataList.add(event.values[2]);
+                    dataList.add(event.values[3]);
+
+//                    sensorData.set("x", event.values[0]);
+//                    sensorData.set("y", event.values[1]);
+//                    sensorData.set("z", event.values[2]);
+//                    sensorData.set("cos", event.values[3]);
                 } else if (sensorType == Sensor.TYPE_STATIONARY_DETECT) {
-                    sensorData.set("stationary", event.values[0]);
+//                    sensorData.set("stationary", event.values[0]);
+                    dataList.add(event.values[0]);
                 } else if (sensorType == Sensor.TYPE_PROXIMITY) {
-                    sensorData.set("proximity", event.values[0]);
+                    dataList.add(event.values[0]);
+//                    sensorData.set("proximity", event.values[0]);
                 } else if (sensorType == Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT) {
-                    sensorData.set("state", event.values[0]);
+//                    sensorData.set("state", event.values[0]);
+                    dataList.add(event.values[0]);
                 } else if (sensorType == Sensor.TYPE_HEART_RATE) {
-                    sensorData.set("heart_rate", event.values[0]);
+                    dataList.add(event.values[0]);
+//                    sensorData.set("heart_rate", event.values[0]);
                 }
 
+
                 // create new SensorServiceData
-                SensorServiceData data = new SensorServiceData(
-                        event.sensor.getType(),
-                        event.timestamp,
-                        sensorData
-                );
+                PSDSData.SensorData data = new PSDSData.SensorData();
+                data.t = event.timestamp;
+                data.s = event.sensor.getType();
+                data.d = dataList;
+//                SensorServiceData data = new SensorServiceData(
+//                        event.sensor.getType(),
+//                        event.timestamp,
+//                        dataList
+//                );
 
                 SensorService.sensorServiceDataList.add(data);
             }
