@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.support.wearable.activity.WearableActivity;
 import android.util.Log;
@@ -22,128 +23,181 @@ public class MainActivity extends WearableActivity {
 
     private TextView mTextView;
     private Button mSubmitBtn;
+    private Button mPermissionsButton;
+    private TextView mServiceStatusText;
+    private SharedPreferences sharedPref;
+    private boolean isServiceRunning;
+    private boolean hasStoragePermission;
+    private boolean hasLocationPermission;
 
-    private final static int LOCATION_PERMSSION_VALUE = 5425;
-    private final static int STORATE_PERMISSION_VALUE = 5426;
     private final static String TAG = "PSDS_MainActivity";
+    private final static int LOCATION_PERMSSION_VALUE = 5425;
+    private final static int STORAGE_PERMISSION_VALUE = 5426;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        mTextView = findViewById(R.id.studyId);
-        mSubmitBtn = findViewById(R.id.submitBtn);
-
-        // check if user already has entered study ID
-        SharedPreferences sharedPref = this.getPreferences(Context.MODE_PRIVATE);
-        String savedStudyId = sharedPref.getString(getString(R.string.saved_study_id), "");
-
-        Log.d(TAG, "Saved study id: " + savedStudyId);
-
-        mSubmitBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Log.d(TAG, "button clicked");
-
-                // check the psds identifier the user entered and validate
-                // also store in shared preferences so we can check on start later to skip entering it
-                String userId = mTextView.getText().toString();
-                if (!userId.equals("")) {
-                    Log.d(TAG, "Evaluating user ID: " + userId);
-                    Pattern p = Pattern.compile("PSDS[0-9]+", Pattern.CASE_INSENSITIVE);
-                    Matcher m = p.matcher(userId);
-                    boolean b = m.matches();
-                    Log.d(TAG, "Regex match for user ID: " + b);
-
-                    if (b || userId.equals("xxr&dxx")) {
-                        Log.d(TAG, "User ID is valid!!!");
-                    } else {
-                        Log.d(TAG, "User ID is invalid!!!");
-                    }
-                } else {
-                    return;
-                }
-            }
-        });
-
         // Enables Always-on
         setAmbientEnabled();
 
-        // need to make sure we have permission for data study to work properly
-        boolean locationPermission = this._requestLocationPermission();
-        Log.d(TAG, "Location permission granted? " + locationPermission);
-        boolean storagePermission = this._requestStoragePermission();
-        Log.d(TAG, "Storage permission granted? " + storagePermission);
+        isServiceRunning = false;
+        sharedPref = this.getPreferences(Context.MODE_PRIVATE);
+        mServiceStatusText = findViewById(R.id.serviceStatusText);
+        mTextView = findViewById(R.id.studyId);
+        mSubmitBtn = findViewById(R.id.submitBtn);
+        mSubmitBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                // check the psds identifier the user entered and validate
+                // also store in shared preferences so we can check on start later to skip entering it
+                String studyId = mTextView.getText().toString().toLowerCase();
+                if (!studyId.equals("")) {
+                    Pattern p = Pattern.compile("PSDS[0-9]+", Pattern.CASE_INSENSITIVE);
+                    Matcher m = p.matcher(studyId);
+                    boolean b = m.matches();
 
-        if (locationPermission && storagePermission) {
-            Intent i = new Intent(MainActivity.this, SensorService.class);
-            startService(i);
-            Log.d(TAG, "SensorService has been started successfully.");
+                    if (b || studyId.equals("xxr&dxx")) {
+                        Log.d(TAG, "User ID is valid.");
+                        // save to sharedPref
+                        sharedPref.edit().putString(Constants.SAVED_STUDY_ID, studyId).apply();
+                        // can start the service now
+                        startSensorService(studyId);
+                    } else {
+                        mServiceStatusText.setVisibility(View.VISIBLE);
+                        mServiceStatusText.setText("Study ID is invalid. Try again.");
+                    }
+                } else {
+                    mServiceStatusText.setVisibility(View.VISIBLE);
+                    mServiceStatusText.setText("Study ID is required.");
+                }
+            }
+        });
+        mPermissionsButton = findViewById(R.id.permissionBtn);
+        mPermissionsButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Log.d(TAG, "Grant permission button clicked");
+                requestStoragePermission();
+                requestLocationPermission();
+            }
+        });
+
+        // check if user already has entered study ID
+        String savedStudyId = sharedPref.getString(Constants.SAVED_STUDY_ID, "");
+        Log.d(TAG, "Saved study id: " + savedStudyId);
+
+        // we have a study id for the device so just start the service to collect data
+        if (!savedStudyId.equals("")) {
+            boolean canStartService = hasPermissionsForService();
+            if (canStartService) {
+                startSensorService(savedStudyId);
+            } else {
+                // cant start service because permissions so show permission button
+                mPermissionsButton.setVisibility(View.VISIBLE);
+                mSubmitBtn.setVisibility(View.GONE);
+                mTextView.setVisibility(View.GONE);
+                mServiceStatusText.setVisibility(View.GONE);
+            }
         } else {
-            Log.d(TAG, "PSDS is missing permission for location and/or storage so we cannot collect data properly.");
+            // lets handle permissions first then allow for study ID to be input
+            // need to make sure we have permission for data study to work properly
+            boolean hasPermissions = this.hasPermissionsForService();
+            Log.d(TAG, "Storage and Location permission granted? " + hasPermissions);
+            if (hasPermissions) {
+                // let user input the study ID here
+                mPermissionsButton.setVisibility(View.GONE);
+                mServiceStatusText.setVisibility(View.GONE);
+                mTextView.setVisibility(View.VISIBLE);
+                mSubmitBtn.setVisibility(View.VISIBLE);
+            } else {
+                Log.d(TAG, "PSDS is missing permission for location and/or storage so we cannot collect data properly.");
+                mSubmitBtn.setVisibility(View.GONE);
+                mTextView.setVisibility(View.GONE);
+                mServiceStatusText.setVisibility(View.VISIBLE);
+                mServiceStatusText.setText("Device storage and location permission are required for data study.");
+                mPermissionsButton.setVisibility(View.VISIBLE);
+            }
         }
-
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode,
                                            String[] permissions, int[] grantResults) {
         switch (requestCode) {
+            case STORAGE_PERMISSION_VALUE: {
+                // If request is cancelled, the result arrays are empty.
+                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    hasStoragePermission = true;
+                } else {
+                    hasStoragePermission = false;
+                }
+            }
             case LOCATION_PERMSSION_VALUE: {
                 // If request is cancelled, the result arrays are empty.
-                if (grantResults.length > 0
-                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    // permission was granted, yay! Do the
-                    // contacts-related task you need to do.
+                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    hasLocationPermission = true;
                 } else {
-                    // permission denied, boo! Disable the
-                    // functionality that depends on this permission.
+                    hasLocationPermission = false;
                 }
-                return;
             }
-            case STORATE_PERMISSION_VALUE: {
-
-            }
-
-            // other 'case' lines to check for other
-            // permissions this app might request.
         }
     }
 
-    private boolean _requestLocationPermission() {
+    private void requestLocationPermission() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
                 != PackageManager.PERMISSION_GRANTED) {
             // Permission is not granted
             // No explanation needed; request the permission
             ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                    5425);
-            return false;
+                    new String[]{Manifest.permission
+                            .ACCESS_FINE_LOCATION},
+                    LOCATION_PERMSSION_VALUE);
+            hasStoragePermission = false;
         } else {
-            return true;
+            hasStoragePermission = true;
         }
     }
 
-    private boolean _requestStoragePermission() {
+    private void requestStoragePermission() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
                 != PackageManager.PERMISSION_GRANTED) {
             // Permission is not granted
             // No explanation needed; request the permission
             ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
-                    5426);
-            return false;
+                    new String[]{Manifest.permission
+                            .WRITE_EXTERNAL_STORAGE},
+                    STORAGE_PERMISSION_VALUE);
+            hasStoragePermission = false;
         } else {
-            return true;
+            hasStoragePermission = true;
         }
     }
 
-    private boolean idIsValid(String id) {
-        return true;
+    private boolean hasPermissionsForService() {
+        // check write storage permission
+        // Permission is not granted
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                == PackageManager.PERMISSION_GRANTED &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                        == PackageManager.PERMISSION_GRANTED;
     }
-//    const regex = /PSDS[0-9]+/gi;
-//    const testID = 'xxr&dxx';
-//        return testID == id || regex.test(id);
-//    }
+
+    private void startSensorService(String studyId) {
+        Intent i = new Intent(MainActivity.this, SensorService.class);
+        i.putExtra(Constants.SENSOR_DELAY, SensorManager.SENSOR_DELAY_NORMAL);
+        i.putExtra(Constants.MAX_REPORTING_DELAY, 40000000);
+        i.putExtra(Constants.USER_IDENTIFIER, studyId);
+        startService(i);
+        Log.d(TAG, "SensorService has been started successfully with study ID: " + studyId);
+        isServiceRunning = true;
+        mTextView.setVisibility(View.GONE);
+        mSubmitBtn.setVisibility(View.GONE);
+        mPermissionsButton.setVisibility(View.GONE);
+        mServiceStatusText.setVisibility(View.VISIBLE);
+        mServiceStatusText.setText("Data collection service is running normally.");
+    }
+
+
 }

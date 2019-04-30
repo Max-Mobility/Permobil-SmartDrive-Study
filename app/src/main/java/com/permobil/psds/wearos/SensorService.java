@@ -22,7 +22,6 @@ import android.util.Log;
 import androidx.core.app.ActivityCompat;
 
 import com.kinvey.android.Client;
-import com.kinvey.android.model.User;
 import com.kinvey.android.store.DataStore;
 import com.kinvey.android.sync.KinveyPushResponse;
 import com.kinvey.android.sync.KinveySyncCallback;
@@ -92,25 +91,16 @@ public class SensorService extends Service {
         this.mHandler = new Handler();
         this.sdCardPath = Environment.getExternalStorageDirectory().getPath();
 
-        // Kinvey Setup
-        this.mKinveyClient = new Client.Builder("kid_SyIIDJjdM", "3cfe36e6ac8f4d80b04014cc980a4d47", this).build();
-        mKinveyClient.enableDebugLogging();
-        Log.d(TAG, "Kinvey Client initialized in Sensor Service!");
+        this.mKinveyClient = ((App) getApplication()).getSharedClient();
+        Log.d(TAG, "Kinvey Client from App.java found and set in service.");
 
         // Get the Kinvey Data Collection for storing data
         this.psdsDataStore = DataStore.collection("PSDSData", PSDSData.class, StoreType.SYNC, mKinveyClient);
         Log.d(TAG, "PSDSDataStore: " + this.psdsDataStore.getCollectionName());
 
-        User kinveyUser = new User();
-        kinveyUser.setUsername("bradwaynemartin@gmail.com");
-        kinveyUser.set("password", "testtest");
-        mKinveyClient.setActiveUser(kinveyUser);
-        Log.d(TAG, "logged in generic user");
-
         // Get the LocationManager so we can send last known location with the record when saving to Kinvey
         mLocationManager = (LocationManager) getApplicationContext().getSystemService(Context.LOCATION_SERVICE);
         Log.d(TAG, "Location Manager: " + mLocationManager);
-
     }
 
     @Override
@@ -121,13 +111,13 @@ public class SensorService extends Service {
         Bundle extras = intent.getExtras();
         if (extras != null) {
             // check for sensor delay from intent
-            int delay = extras.getInt("SENSOR_DELAY", 0);
+            int delay = extras.getInt(Constants.SENSOR_DELAY, 0);
             sensorDelay = delay != 0 ? delay : SensorManager.SENSOR_DELAY_UI;
             // check for reporting delay
-            int reportingDelay = extras.getInt("MAX_REPORTING_DELAY", 0);
+            int reportingDelay = extras.getInt(Constants.MAX_REPORTING_DELAY, 0);
             maxReportingLatency = reportingDelay != 0 ? reportingDelay : 50000000;
             // check for user_identifier
-            String id = extras.getString("USER_IDENTIFIER", null);
+            String id = extras.getString(Constants.USER_IDENTIFIER, null);
             userIdentifier = id != null ? id : "No User Provided to SensorService.";
         } else {
             sensorDelay = SensorManager.SENSOR_DELAY_UI;
@@ -154,7 +144,7 @@ public class SensorService extends Service {
             @Override
             public void run() {
                 _writeAndUpload();
-                mHandler.postDelayed(mHandlerTask, 10 * 1000);
+                mHandler.postDelayed(mHandlerTask, 60 * 1000);
             }
         };
 
