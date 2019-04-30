@@ -17,5 +17,8 @@ public class PSDSLocation extends GenericJson {
     }
 
     public PSDSLocation(double latitude, double longitude, long time) {
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.time = time;
     }
 }

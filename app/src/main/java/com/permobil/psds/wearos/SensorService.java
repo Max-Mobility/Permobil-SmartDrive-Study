@@ -23,6 +23,7 @@ import android.util.Log;
 import androidx.core.app.ActivityCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
+import com.google.api.client.json.GenericJson;
 import com.kinvey.android.Client;
 import com.kinvey.android.store.DataStore;
 import com.kinvey.android.sync.KinveyPushCallback;
@@ -35,7 +36,6 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 
 
 public class SensorService extends Service {
@@ -251,7 +251,7 @@ public class SensorService extends Service {
         @Override
         public void onSensorChanged(SensorEvent event) {
             if (mListener != null) {
-                HashMap<String, Float> sensorData = new HashMap<>();
+                GenericJson sensorData = new GenericJson();
 
                 int sensorType = event.sensor.getType();
                 // depending on the the sensor type set the result to return in the listener
@@ -260,28 +260,28 @@ public class SensorService extends Service {
                         || sensorType == Sensor.TYPE_GRAVITY
                         || sensorType == Sensor.TYPE_GYROSCOPE
                         || sensorType == Sensor.TYPE_MAGNETIC_FIELD) {
-                    sensorData.put("x", event.values[0]);
-                    sensorData.put("y", event.values[1]);
-                    sensorData.put("z", event.values[2]);
+                    sensorData.set("x", event.values[0]);
+                    sensorData.set("y", event.values[1]);
+                    sensorData.set("z", event.values[2]);
                 } else if (sensorType == Sensor.TYPE_ROTATION_VECTOR) {
-                    sensorData.put("x", event.values[0]);
-                    sensorData.put("y", event.values[1]);
-                    sensorData.put("z", event.values[2]);
-                    sensorData.put("cos", event.values[3]);
-                    sensorData.put("heading_accuracy", event.values[4]);
+                    sensorData.set("x", event.values[0]);
+                    sensorData.set("y", event.values[1]);
+                    sensorData.set("z", event.values[2]);
+                    sensorData.set("cos", event.values[3]);
+                    sensorData.set("heading_accuracy", event.values[4]);
                 } else if (sensorType == Sensor.TYPE_GAME_ROTATION_VECTOR) {
-                    sensorData.put("x", event.values[0]);
-                    sensorData.put("y", event.values[1]);
-                    sensorData.put("z", event.values[2]);
-                    sensorData.put("cos", event.values[3]);
+                    sensorData.set("x", event.values[0]);
+                    sensorData.set("y", event.values[1]);
+                    sensorData.set("z", event.values[2]);
+                    sensorData.set("cos", event.values[3]);
                 } else if (sensorType == Sensor.TYPE_STATIONARY_DETECT) {
-                    sensorData.put("stationary", event.values[0]);
+                    sensorData.set("stationary", event.values[0]);
                 } else if (sensorType == Sensor.TYPE_PROXIMITY) {
-                    sensorData.put("proximity", event.values[0]);
+                    sensorData.set("proximity", event.values[0]);
                 } else if (sensorType == Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT) {
-                    sensorData.put("state", event.values[0]);
+                    sensorData.set("state", event.values[0]);
                 } else if (sensorType == Sensor.TYPE_HEART_RATE) {
-                    sensorData.put("heart_rate", event.values[0]);
+                    sensorData.set("heart_rate", event.values[0]);
                 }
 
                 // create new SensorServiceData
