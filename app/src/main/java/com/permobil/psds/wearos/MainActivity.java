@@ -43,7 +43,7 @@ public class MainActivity extends WearableActivity {
         setAmbientEnabled();
 
         isServiceRunning = false;
-        sharedPref = this.getPreferences(Context.MODE_PRIVATE);
+        sharedPref = getPreferences(Context.MODE_PRIVATE);
         mServiceStatusText = findViewById(R.id.serviceStatusText);
         mTextView = findViewById(R.id.studyId);
         mSubmitBtn = findViewById(R.id.submitBtn);
@@ -78,7 +78,12 @@ public class MainActivity extends WearableActivity {
         mPermissionsButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Log.d(TAG, "Grant permission button clicked");
+                // need to see if permissions have been granted if so we can move past this step
+                boolean b = hasPermissionsForService();
+                if (b) {
+                    recreate();
+                    return;
+                }
                 requestStoragePermission();
                 requestLocationPermission();
             }
@@ -188,7 +193,6 @@ public class MainActivity extends WearableActivity {
         Intent i = new Intent(MainActivity.this, SensorService.class);
         i.putExtra(Constants.SENSOR_DELAY, SensorManager.SENSOR_DELAY_NORMAL);
         i.putExtra(Constants.MAX_REPORTING_DELAY, 40000000);
-        i.putExtra(Constants.USER_IDENTIFIER, studyId);
         startService(i);
         Log.d(TAG, "SensorService has been started successfully with study ID: " + studyId);
         isServiceRunning = true;
