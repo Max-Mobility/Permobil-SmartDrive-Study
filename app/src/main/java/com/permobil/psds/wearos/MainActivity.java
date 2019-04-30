@@ -203,5 +203,4 @@ public class MainActivity extends WearableActivity {
         mServiceStatusText.setText("Data collection service is running normally.");
     }
 
-
 }

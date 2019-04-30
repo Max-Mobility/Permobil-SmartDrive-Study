@@ -1,7 +1,6 @@
 package com.permobil.psds.wearos;
 
 import android.hardware.Sensor;
-import android.location.Location;
 import android.os.Build;
 
 import com.google.api.client.json.GenericJson;
@@ -37,8 +36,9 @@ public class PSDSData extends GenericJson {
     public String user_identifier;
 
     @Key
-    public Location location;
+    public PSDSLocation location;
 
     public PSDSData() {
     }
+
 }

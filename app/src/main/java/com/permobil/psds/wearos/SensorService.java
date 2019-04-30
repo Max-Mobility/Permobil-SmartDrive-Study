@@ -10,6 +10,7 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.location.Location;
 import android.location.LocationManager;
 import android.os.Bundle;
 import android.os.Environment;
@@ -166,6 +167,7 @@ public class SensorService extends Service {
 
         // BRAD - thinking that the GC messages are about the static arraylist and retaining sensor data
         data.sensor_data = SensorService.sensorServiceDataList;
+        Log.d(TAG, "PSDSData sensor_data values: " + data.sensor_data);
         SensorService.sensorServiceDataList = new ArrayList<>();
 //        data.sensor_list = mSensorManager.getSensorList(Sensor.TYPE_ALL);
         data.user_identifier = this.userIdentifier;
@@ -175,7 +177,13 @@ public class SensorService extends Service {
             Log.w(TAG, "Unable to get device location because LOCATION permission has not been granted.");
             data.location = null;
         } else {
-            data.location = mLocationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+            Location loc = mLocationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+            if (loc != null) {
+                PSDSLocation psdsloc = new PSDSLocation(loc.getLatitude(), loc.getLongitude(), loc.getTime());
+                data.location = psdsloc;
+            } else {
+                data.location = null;
+            }
             Log.d(TAG, "Data location: " + data.location);
         }
 
@@ -183,8 +191,7 @@ public class SensorService extends Service {
             psdsDataStore.save(data, new KinveyClientCallback<PSDSData>() {
                 @Override
                 public void onSuccess(PSDSData result) {
-                    Log.d(TAG, "Data Collection saved to Kinvey successfully.");
-                    Log.d(TAG, "Kinvey entity: " + result);
+                    Log.d(TAG, "Entity saved to client: " + result);
                     psdsDataStore.sync(new KinveySyncCallback() {
                         @Override
                         public void onSuccess(KinveyPushResponse kinveyPushResponse, KinveyPullResponse kinveyPullResponse) {
@@ -291,7 +298,6 @@ public class SensorService extends Service {
                 data.d = sensorData;
 
                 SensorService.sensorServiceDataList.add(data);
-
             }
         }
 
