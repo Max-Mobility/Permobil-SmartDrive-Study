@@ -304,7 +304,6 @@ public class SensorService extends Service {
                         event.timestamp,
                         sensorData
                 );
-                Log.d(TAG, "Sensor data: " + data);
 
                 SensorService.sensorServiceDataList.add(data);
             }

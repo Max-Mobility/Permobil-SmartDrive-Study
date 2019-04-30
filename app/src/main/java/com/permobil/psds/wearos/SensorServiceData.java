@@ -41,6 +41,9 @@ public class SensorServiceData extends GenericJson {
     }
 
     public SensorServiceData(int s, long ts, HashMap d) {
+        this.s = s;
+        this.ts = ts;
+        this.d = d;
         this.t = System.currentTimeMillis() / 1000;
     }
 
