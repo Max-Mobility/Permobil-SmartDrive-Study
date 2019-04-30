@@ -21,6 +21,7 @@ import android.os.PowerManager.WakeLock;
 import android.util.Log;
 
 import androidx.core.app.ActivityCompat;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.kinvey.android.Client;
 import com.kinvey.android.store.DataStore;
@@ -216,11 +217,16 @@ public class SensorService extends Service {
                         @Override
                         public void onPushSuccess(KinveyPushResponse kinveyPushResponse) {
                             Log.d(TAG, "Data pushed to Kinvey successfully. Check kinvey console.");
+                            sendMessageToActivity("Data service syncing data to backend successfully.");
                         }
 
                         @Override
                         public void onFailure(Throwable throwable) {
-                            Log.w(TAG, "Kinvey push failed: " + throwable.getMessage());
+                            Log.e(TAG, "Kinvey push failure message" +
+                                    ": " + throwable.getMessage());
+                            Log.e(TAG, "Kinvey push failure cause: " + throwable.getCause());
+                            sendMessageToActivity(throwable.getMessage());
+
                         }
                     });
                 }
@@ -292,10 +298,13 @@ public class SensorService extends Service {
                     sensorData.put("heart_rate", event.values[0]);
                 }
 
-                SensorServiceData data = new SensorServiceData();
-                data.s = event.sensor.getType();
-                data.ts = event.timestamp;
-                data.d = sensorData;
+                // create new SensorServiceData
+                SensorServiceData data = new SensorServiceData(
+                        event.sensor.getType(),
+                        event.timestamp,
+                        sensorData
+                );
+                Log.d(TAG, "Sensor data: " + data);
 
                 SensorService.sensorServiceDataList.add(data);
             }
@@ -362,6 +371,13 @@ public class SensorService extends Service {
         mWakeLock = mgr.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PermobilWear:SensorServiceWakeLock");
         mWakeLock.acquire();
         Log.d(TAG, "PermobilWear:SensorServiceWakeLock has been acquired.");
+    }
+
+    private void sendMessageToActivity(String msg) {
+        Intent intent = new Intent(Constants.SENSOR_SERVICE_MESSAGE_INTENT_KEY);
+        // You can also include some extra data.
+        intent.putExtra(Constants.SENSOR_SERVICE_MESSAGE, msg);
+        LocalBroadcastManager.getInstance(getApplicationContext()).sendBroadcast(intent);
     }
 
 }

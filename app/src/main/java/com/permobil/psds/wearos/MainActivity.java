@@ -1,8 +1,10 @@
 package com.permobil.psds.wearos;
 
 import android.Manifest;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.hardware.SensorManager;
@@ -15,6 +17,7 @@ import android.widget.TextView;
 
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -26,6 +29,7 @@ public class MainActivity extends WearableActivity {
     private Button mPermissionsButton;
     private TextView mServiceStatusText;
     private SharedPreferences sharedPref;
+    private BroadcastReceiver mMessageReceiver;
     private boolean isServiceRunning;
     private boolean hasStoragePermission;
     private boolean hasLocationPermission;
@@ -34,10 +38,23 @@ public class MainActivity extends WearableActivity {
     private final static int LOCATION_PERMSSION_VALUE = 5425;
     private final static int STORAGE_PERMISSION_VALUE = 5426;
 
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        this.mMessageReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                // Get extra data included in the Intent
+                String message = intent.getStringExtra(Constants.SENSOR_SERVICE_MESSAGE);
+                mServiceStatusText.setText(message);
+            }
+        };
+
+        LocalBroadcastManager.getInstance(this).registerReceiver(
+                mMessageReceiver, new IntentFilter(Constants.SENSOR_SERVICE_MESSAGE_INTENT_KEY));
 
         // Enables Always-on
         setAmbientEnabled();
