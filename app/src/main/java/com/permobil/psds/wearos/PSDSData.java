@@ -18,16 +18,16 @@ public class PSDSData extends GenericJson {
     public List<Sensor> sensor_list;
 
     @Key
-    public String device_manufacturer = Build.MANUFACTURER;
+    public String device_manufacturer;
 
     @Key
-    public String device_model = Build.MODEL;
+    public String device_model;
 
     @Key
-    public String device_os_version = Build.VERSION.RELEASE;
+    public String device_os_version;
 
     @Key
-    public int device_sdk_version = Build.VERSION.SDK_INT;
+    public int device_sdk_version;
 
     @Key
     public String device_uuid;
@@ -39,6 +39,12 @@ public class PSDSData extends GenericJson {
     public PSDSLocation location;
 
     public PSDSData() {
+        this.device_manufacturer = Build.MANUFACTURER;
+        this.device_model = Build.MODEL;
+        this.device_os_version = Build.VERSION.RELEASE;
+        this.device_sdk_version = Build.VERSION.SDK_INT;
+
     }
+
 
 }

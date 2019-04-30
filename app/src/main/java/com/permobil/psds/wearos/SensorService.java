@@ -167,6 +167,7 @@ public class SensorService extends Service {
         data.device_uuid = this.deviceUUID;
 
         // BRAD - thinking that the GC messages are about the static arraylist and retaining sensor data
+        Log.d(TAG, "ServiceDataList size: " + sensorServiceDataList.size());
         data.sensor_data = SensorService.sensorServiceDataList;
         Log.d(TAG, "PSDSData sensor_data values: " + data.sensor_data);
         SensorService.sensorServiceDataList = new ArrayList<>();
