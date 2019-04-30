@@ -25,11 +25,10 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.kinvey.android.Client;
 import com.kinvey.android.store.DataStore;
+import com.kinvey.android.sync.KinveyPushCallback;
 import com.kinvey.android.sync.KinveyPushResponse;
-import com.kinvey.android.sync.KinveySyncCallback;
 import com.kinvey.java.KinveyException;
 import com.kinvey.java.core.KinveyClientCallback;
-import com.kinvey.java.model.KinveyPullResponse;
 import com.kinvey.java.store.StoreType;
 
 import java.io.File;
@@ -193,31 +192,12 @@ public class SensorService extends Service {
             psdsDataStore.save(data, new KinveyClientCallback<PSDSData>() {
                 @Override
                 public void onSuccess(PSDSData result) {
-                    Log.d(TAG, "Entity saved to client: " + result);
-                    psdsDataStore.sync(new KinveySyncCallback() {
+                    Log.d(TAG, "Entity saved to local Kinvey client: " + result);
+                    // Push data to Kinvey backend.
+                    psdsDataStore.push(new KinveyPushCallback() {
                         @Override
-                        public void onSuccess(KinveyPushResponse kinveyPushResponse, KinveyPullResponse kinveyPullResponse) {
-
-                        }
-
-                        @Override
-                        public void onPullStarted() {
-
-                        }
-
-                        @Override
-                        public void onPushStarted() {
-
-                        }
-
-                        @Override
-                        public void onPullSuccess(KinveyPullResponse kinveyPullResponse) {
-
-                        }
-
-                        @Override
-                        public void onPushSuccess(KinveyPushResponse kinveyPushResponse) {
-                            Log.d(TAG, "Data pushed to Kinvey successfully. Check kinvey console.");
+                        public void onSuccess(KinveyPushResponse kinveyPushResponse) {
+                            Log.d(TAG, "Data pushed to Kinvey successfully. Check Kinvey console.");
                             sendMessageToActivity("Data service syncing data to backend successfully.");
                         }
 
@@ -228,6 +208,11 @@ public class SensorService extends Service {
                             Log.e(TAG, "Kinvey push failure cause: " + throwable.getCause());
                             sendMessageToActivity(throwable.getMessage());
 
+                        }
+
+                        @Override
+                        public void onProgress(long current, long all) {
+                            Log.d(TAG, "Kinvey push progress: " + current);
                         }
                     });
                 }
