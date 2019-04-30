@@ -116,9 +116,8 @@ public class SensorService extends Service {
             // check for reporting delay
             int reportingDelay = extras.getInt(Constants.MAX_REPORTING_DELAY, 0);
             maxReportingLatency = reportingDelay != 0 ? reportingDelay : 50000000;
-            // check for user_identifier
-            String id = extras.getString(Constants.USER_IDENTIFIER, null);
-            userIdentifier = id != null ? id : "No User Provided to SensorService.";
+            String savedStudyId = getSharedPreferences("com.permobil.psds.wearos", Context.MODE_PRIVATE).getString(Constants.SAVED_STUDY_ID, "");
+            userIdentifier = savedStudyId;
         } else {
             sensorDelay = SensorManager.SENSOR_DELAY_UI;
             maxReportingLatency = 50000000;
