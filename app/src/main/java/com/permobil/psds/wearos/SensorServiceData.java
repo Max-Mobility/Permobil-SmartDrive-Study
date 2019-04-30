@@ -35,8 +35,12 @@ public class SensorServiceData extends GenericJson {
     @Key
     public HashMap d;
 
-
+    // Empty constructor
     public SensorServiceData() {
+        this.t = System.currentTimeMillis() / 1000;
+    }
+
+    public SensorServiceData(int s, long ts, HashMap d) {
         this.t = System.currentTimeMillis() / 1000;
     }
 
