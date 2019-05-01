@@ -94,11 +94,11 @@ public class SensorService extends Service {
             sensorDelay = delay != 0 ? delay : 40000; // 40000 us or 40 ms delay
             // check for reporting delay
             int reportingDelay = extras.getInt(Constants.MAX_REPORTING_DELAY, 0);
-            maxReportingLatency = reportingDelay != 0 ? reportingDelay : 50000000;
+            maxReportingLatency = reportingDelay != 0 ? reportingDelay : 10000000; // 10 seconds default between sensor updates
             userIdentifier = getSharedPreferences(getString(R.string.shared_preference_file_key), Context.MODE_PRIVATE).getString(Constants.SAVED_STUDY_ID, "");
         } else {
             sensorDelay = 40000; // 40000 us or 40 ms delay
-            maxReportingLatency = 50000000;
+            maxReportingLatency = 10000000; // 10 seconds between sensor updates
             userIdentifier = null;
         }
 
