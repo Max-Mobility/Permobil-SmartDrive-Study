@@ -113,7 +113,7 @@ public class SensorService extends Service {
         if (extras != null) {
             // check for sensor delay from intent
             int delay = extras.getInt(Constants.SENSOR_DELAY, 0);
-            sensorDelay = delay != 0 ? delay : SensorManager.SENSOR_DELAY_UI;
+            sensorDelay = delay != 0 ? delay : 40000; // 40000 us or 40 ms delay
             // check for reporting delay
             int reportingDelay = extras.getInt(Constants.MAX_REPORTING_DELAY, 0);
             maxReportingLatency = reportingDelay != 0 ? reportingDelay : 50000000;
