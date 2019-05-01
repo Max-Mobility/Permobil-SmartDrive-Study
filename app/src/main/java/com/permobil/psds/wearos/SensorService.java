@@ -132,6 +132,7 @@ public class SensorService extends Service {
     }
 
     private void _PushDataToKinveyRemote() {
+        Log.d(TAG, "_PushDataToKinveyRemote()...");
         // Push data to Kinvey backend.
         psdsDataStore.push(new KinveyPushCallback() {
             @Override
