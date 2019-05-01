@@ -60,7 +60,7 @@ public class MainActivity extends WearableActivity {
         setAmbientEnabled();
 
         isServiceRunning = false;
-        sharedPref = getPreferences(Context.MODE_PRIVATE);
+        sharedPref = getSharedPreferences(getString(R.string.shared_preference_file_key), Context.MODE_PRIVATE);
         mServiceStatusText = findViewById(R.id.serviceStatusText);
         mTextView = findViewById(R.id.studyId);
         mSubmitBtn = findViewById(R.id.submitBtn);
