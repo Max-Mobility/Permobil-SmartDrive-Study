@@ -155,12 +155,12 @@ public class SensorService extends Service {
             psdsDataStore.save(data, new KinveyClientCallback<PSDSData>() {
                 @Override
                 public void onSuccess(PSDSData result) {
-                    Log.d(TAG, "Entity saved to local Kinvey client: " + result);
+                    Log.d(TAG, "Entity saved to local Kinvey client");
                     // Push data to Kinvey backend.
                     psdsDataStore.push(new KinveyPushCallback() {
                         @Override
                         public void onSuccess(KinveyPushResponse kinveyPushResponse) {
-                            Log.d(TAG, "Data pushed to Kinvey successfully. Check Kinvey console.");
+                            Log.d(TAG, "Data pushed to Kinvey successfully. Check Kinvey console. Success Count = " + kinveyPushResponse.getSuccessCount());
                             sendMessageToActivity("Data service syncing data to backend successfully.");
                         }
 
@@ -174,7 +174,7 @@ public class SensorService extends Service {
 
                         @Override
                         public void onProgress(long current, long all) {
-                            Log.d(TAG, "Kinvey push progress: " + current);
+                            Log.d(TAG, "Kinvey push progress: " + current + " / " + all);
                         }
                     });
                 }
