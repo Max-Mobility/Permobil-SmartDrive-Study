@@ -167,7 +167,7 @@ public class SensorService extends Service {
 
         // BRAD - thinking that the GC messages are about the static arraylist and retaining sensor data
         Log.d(TAG, "ServiceDataList size: " + sensorServiceDataList.size());
-        data.set("sensor_data", sensorServiceDataList);
+        data.sensor_data = sensorServiceDataList;
 //        data.sensor_data = SensorService.sensorServiceDataList;
 //        Log.d(TAG, "PSDSData sensor_data values: " + data.sensor_data);
         SensorService.sensorServiceDataList = new ArrayList<>();
@@ -252,73 +252,16 @@ public class SensorService extends Service {
         @Override
         public void onSensorChanged(SensorEvent event) {
             if (mListener != null) {
-                GenericJson sensorData = new GenericJson();
-
-//                Float[] dataArray = new Float[];
                 ArrayList<Float> dataList = new ArrayList<>();
-
-                int sensorType = event.sensor.getType();
-                // depending on the the sensor type set the result to return in the listener
-                if (sensorType == Sensor.TYPE_ACCELEROMETER
-                        || sensorType == Sensor.TYPE_LINEAR_ACCELERATION
-                        || sensorType == Sensor.TYPE_GRAVITY
-                        || sensorType == Sensor.TYPE_GYROSCOPE
-                        || sensorType == Sensor.TYPE_MAGNETIC_FIELD) {
-//                    dataArray.add
-                    dataList.add(event.values[0]);
-                    dataList.add(event.values[1]);
-                    dataList.add(event.values[2]);
-//                    sensorData.set("x", event.values[0]);
-//                    sensorData.set("y", event.values[1]);
-//                    sensorData.set("z", event.values[2]);
-                } else if (sensorType == Sensor.TYPE_ROTATION_VECTOR) {
-                    dataList.add(event.values[0]);
-                    dataList.add(event.values[1]);
-                    dataList.add(event.values[2]);
-                    dataList.add(event.values[3]);
-                    dataList.add(event.values[4]);
-
-//                    sensorData.set("x", event.values[0]);
-//                    sensorData.set("y", event.values[1]);
-//                    sensorData.set("z", event.values[2]);
-//                    sensorData.set("cos", event.values[3]);
-//                    sensorData.set("heading_accuracy", event.values[4]);
-                } else if (sensorType == Sensor.TYPE_GAME_ROTATION_VECTOR) {
-                    dataList.add(event.values[0]);
-                    dataList.add(event.values[1]);
-                    dataList.add(event.values[2]);
-                    dataList.add(event.values[3]);
-
-//                    sensorData.set("x", event.values[0]);
-//                    sensorData.set("y", event.values[1]);
-//                    sensorData.set("z", event.values[2]);
-//                    sensorData.set("cos", event.values[3]);
-                } else if (sensorType == Sensor.TYPE_STATIONARY_DETECT) {
-//                    sensorData.set("stationary", event.values[0]);
-                    dataList.add(event.values[0]);
-                } else if (sensorType == Sensor.TYPE_PROXIMITY) {
-                    dataList.add(event.values[0]);
-//                    sensorData.set("proximity", event.values[0]);
-                } else if (sensorType == Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT) {
-//                    sensorData.set("state", event.values[0]);
-                    dataList.add(event.values[0]);
-                } else if (sensorType == Sensor.TYPE_HEART_RATE) {
-                    dataList.add(event.values[0]);
-//                    sensorData.set("heart_rate", event.values[0]);
+                for (float f : event.values) {
+                    dataList.add(Float.valueOf(f));
                 }
-
-
                 // create new SensorServiceData
-                PSDSData.SensorData data = new PSDSData.SensorData();
-                data.t = event.timestamp;
-                data.s = event.sensor.getType();
-                data.d = dataList;
-//                SensorServiceData data = new SensorServiceData(
-//                        event.sensor.getType(),
-//                        event.timestamp,
-//                        dataList
-//                );
-
+                PSDSData.SensorData data = new PSDSData.SensorData(
+                        event.sensor.getType(),
+                        event.timestamp,
+                        dataList
+                );
                 SensorService.sensorServiceDataList.add(data);
             }
         }

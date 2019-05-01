@@ -6,7 +6,7 @@ import android.os.Build;
 import com.google.api.client.json.GenericJson;
 import com.google.api.client.util.Key;
 
-import java.util.ArrayList;
+import java.util.List;
 
 public class PSDSData extends GenericJson {
 
@@ -34,14 +34,14 @@ public class PSDSData extends GenericJson {
          * Hashmap for storing the sensor data.
          */
         @Key
-        public ArrayList<Float> d;
+        public List<Float> d;
 
         // anything extending GernericJson must have empty constructor
         public SensorData() {
             this.t = System.currentTimeMillis() / 1000;
         }
 
-        public SensorData(int s, long ts, ArrayList<Float> d) {
+        public SensorData(int s, long ts, List<Float> d) {
             this.s = s;
             this.t = System.currentTimeMillis() / 1000;
             this.ts = ts;
@@ -50,7 +50,10 @@ public class PSDSData extends GenericJson {
     }
 
     @Key
-    public ArrayList<Sensor> sensor_list;
+    public List<Sensor> sensor_list;
+
+    @Key
+    public List<SensorData> sensor_data;
 
     @Key
     public String device_manufacturer;
