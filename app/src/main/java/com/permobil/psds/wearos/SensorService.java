@@ -253,7 +253,7 @@ public class SensorService extends Service {
 
             Sensor mGravity = mSensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY);
             if (mGravity != null)
-                mSensorManager.registerListener(mListener, mGravity, delay, 50000000);
+                mSensorManager.registerListener(mListener, mGravity, delay, reportingLatency);
 
             Sensor mMagneticField = mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
             if (mMagneticField != null)
