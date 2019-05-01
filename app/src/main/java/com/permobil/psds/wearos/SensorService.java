@@ -120,7 +120,7 @@ public class SensorService extends Service {
             String savedStudyId = getSharedPreferences("com.permobil.psds.wearos", Context.MODE_PRIVATE).getString(Constants.SAVED_STUDY_ID, "");
             userIdentifier = savedStudyId;
         } else {
-            sensorDelay = SensorManager.SENSOR_DELAY_UI;
+            sensorDelay = 40000; // 40000 us or 40 ms delay
             maxReportingLatency = 50000000;
             userIdentifier = null;
         }
@@ -144,7 +144,7 @@ public class SensorService extends Service {
             @Override
             public void run() {
                 _writeAndUpload();
-                mHandler.postDelayed(mHandlerTask, 10 * 1000);
+                mHandler.postDelayed(mHandlerTask, 60 * 1000);
             }
         };
 
