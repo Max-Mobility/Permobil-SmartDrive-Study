@@ -47,6 +47,7 @@ public class SensorService extends Service {
     private Runnable mPushTask;
     private SensorEventListener mListener;
 
+    public boolean isPushing = false;
     public static ArrayList<PSDSData.SensorData> sensorServiceDataList = new ArrayList<>();
 
     public SensorService() {
@@ -121,7 +122,7 @@ public class SensorService extends Service {
             @Override
             public void run() {
                 _PushDataToKinveyRemote();
-                mHandler.postDelayed(mPushTask, 10 * 1000);
+                mHandler.postDelayed(mPushTask, 60 * 1000);
             }
         };
 
@@ -133,16 +134,23 @@ public class SensorService extends Service {
 
     private void _PushDataToKinveyRemote() {
         Log.d(TAG, "_PushDataToKinveyRemote()...");
+        if (isPushing) {
+            Log.d(TAG, "already pushing");
+            return;
+        }
+        isPushing = true;
         // Push data to Kinvey backend.
         psdsDataStore.push(new KinveyPushCallback() {
             @Override
             public void onSuccess(KinveyPushResponse kinveyPushResponse) {
+                isPushing = false;
                 Log.d(TAG, "Data pushed to Kinvey successfully. Check Kinvey console. Success Count = " + kinveyPushResponse.getSuccessCount());
                 sendMessageToActivity("Data service syncing data to backend successfully.");
             }
 
             @Override
             public void onFailure(Throwable throwable) {
+                isPushing = false;
                 Log.e(TAG, "Kinvey push failure message" +
                         ": " + throwable.getMessage());
                 Log.e(TAG, "Kinvey push failure cause: " + throwable.getCause());
