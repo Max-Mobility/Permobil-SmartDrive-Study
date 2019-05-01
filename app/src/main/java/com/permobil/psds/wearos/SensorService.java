@@ -95,7 +95,7 @@ public class SensorService extends Service {
             // check for reporting delay
             int reportingDelay = extras.getInt(Constants.MAX_REPORTING_DELAY, 0);
             maxReportingLatency = reportingDelay != 0 ? reportingDelay : 50000000;
-            userIdentifier = getSharedPreferences("com.permobil.psds.wearos", Context.MODE_PRIVATE).getString(Constants.SAVED_STUDY_ID, "");
+            userIdentifier = getSharedPreferences(getString(R.string.shared_preference_file_key), Context.MODE_PRIVATE).getString(Constants.SAVED_STUDY_ID, "");
         } else {
             sensorDelay = 40000; // 40000 us or 40 ms delay
             maxReportingLatency = 50000000;
@@ -124,6 +124,11 @@ public class SensorService extends Service {
 
     private void _UploadDataToKinvey() {
         Log.d(TAG, "_UploadDataToKinvey()...");
+        // adding an empty check to avoid pushing the initial service starting records with no sensor_data since the intervals haven't clocked at that time
+        if (sensorServiceDataList.isEmpty()) {
+            Log.d(TAG, "Sensor data list is empty, so will not save/push this record.");
+            return;
+        }
         PSDSData data = new PSDSData();
         data.user_identifier = this.userIdentifier;
         data.device_uuid = this.deviceUUID;

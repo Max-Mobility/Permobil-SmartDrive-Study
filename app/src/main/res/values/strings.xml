@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">Study Data Collector</string>
     <string name="service_status_normal">Service is operating normally.</string>
+    <string name="shared_preference_file_key">com.permobil.psds.wearos.SHARED_PREFERENCE_FILE_KEY</string>
 </resources>
