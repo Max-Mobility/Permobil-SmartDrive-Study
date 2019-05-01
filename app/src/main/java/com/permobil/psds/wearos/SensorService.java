@@ -136,7 +136,6 @@ public class SensorService extends Service {
         psdsDataStore.push(new KinveyPushCallback() {
             @Override
             public void onSuccess(KinveyPushResponse kinveyPushResponse) {
-                Log.d(TAG, "Test");
                 Log.d(TAG, "Data pushed to Kinvey successfully. Check Kinvey console. Success Count = " + kinveyPushResponse.getSuccessCount());
                 sendMessageToActivity("Data service syncing data to backend successfully.");
             }
