@@ -3,6 +3,8 @@ package com.permobil.psds.wearos;
 import com.google.api.client.json.GenericJson;
 import com.google.api.client.util.Key;
 
+import java.util.List;
+
 
 public class SensorServiceData extends GenericJson {
 
@@ -31,17 +33,17 @@ public class SensorServiceData extends GenericJson {
      * Hashmap for storing the sensor data.
      */
     @Key
-    public GenericJson d;
+    public List<Float> d;
 
     // Empty constructor
     public SensorServiceData() {
         this.t = System.currentTimeMillis() / 1000;
     }
 
-    public SensorServiceData(int s, long ts, GenericJson d) {
+    public SensorServiceData(int s, long ts, List<Float> d) {
         this.s = s;
         this.ts = ts;
-        this.d = d.clone();
+        this.d = d;
         this.t = System.currentTimeMillis() / 1000;
     }
 

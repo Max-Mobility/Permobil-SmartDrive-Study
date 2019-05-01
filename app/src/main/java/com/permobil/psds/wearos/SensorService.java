@@ -67,7 +67,7 @@ public class SensorService extends Service {
     private Sensor mProximity;
     private Sensor mOffBodyDetect;
 
-    public static ArrayList<SensorServiceData> sensorServiceDataList = new ArrayList<>();
+    public static ArrayList<PSDSData.SensorData> sensorServiceDataList = new ArrayList<>();
 
     public SensorService() {
     }
@@ -113,14 +113,14 @@ public class SensorService extends Service {
         if (extras != null) {
             // check for sensor delay from intent
             int delay = extras.getInt(Constants.SENSOR_DELAY, 0);
-            sensorDelay = delay != 0 ? delay : SensorManager.SENSOR_DELAY_UI;
+            sensorDelay = delay != 0 ? delay : 40000; // 40000 us or 40 ms delay
             // check for reporting delay
             int reportingDelay = extras.getInt(Constants.MAX_REPORTING_DELAY, 0);
             maxReportingLatency = reportingDelay != 0 ? reportingDelay : 50000000;
             String savedStudyId = getSharedPreferences("com.permobil.psds.wearos", Context.MODE_PRIVATE).getString(Constants.SAVED_STUDY_ID, "");
             userIdentifier = savedStudyId;
         } else {
-            sensorDelay = SensorManager.SENSOR_DELAY_UI;
+            sensorDelay = 40000; // 40000 us or 40 ms delay
             maxReportingLatency = 50000000;
             userIdentifier = null;
         }
@@ -167,8 +167,9 @@ public class SensorService extends Service {
 
         // BRAD - thinking that the GC messages are about the static arraylist and retaining sensor data
         Log.d(TAG, "ServiceDataList size: " + sensorServiceDataList.size());
-        data.sensor_data = SensorService.sensorServiceDataList;
-        Log.d(TAG, "PSDSData sensor_data values: " + data.sensor_data);
+        data.sensor_data = sensorServiceDataList;
+//        data.sensor_data = SensorService.sensorServiceDataList;
+//        Log.d(TAG, "PSDSData sensor_data values: " + data.sensor_data);
         SensorService.sensorServiceDataList = new ArrayList<>();
 //        data.sensor_list = mSensorManager.getSensorList(Sensor.TYPE_ALL);
         data.user_identifier = this.userIdentifier;
@@ -251,46 +252,16 @@ public class SensorService extends Service {
         @Override
         public void onSensorChanged(SensorEvent event) {
             if (mListener != null) {
-                GenericJson sensorData = new GenericJson();
-
-                int sensorType = event.sensor.getType();
-                // depending on the the sensor type set the result to return in the listener
-                if (sensorType == Sensor.TYPE_ACCELEROMETER
-                        || sensorType == Sensor.TYPE_LINEAR_ACCELERATION
-                        || sensorType == Sensor.TYPE_GRAVITY
-                        || sensorType == Sensor.TYPE_GYROSCOPE
-                        || sensorType == Sensor.TYPE_MAGNETIC_FIELD) {
-                    sensorData.set("x", event.values[0]);
-                    sensorData.set("y", event.values[1]);
-                    sensorData.set("z", event.values[2]);
-                } else if (sensorType == Sensor.TYPE_ROTATION_VECTOR) {
-                    sensorData.set("x", event.values[0]);
-                    sensorData.set("y", event.values[1]);
-                    sensorData.set("z", event.values[2]);
-                    sensorData.set("cos", event.values[3]);
-                    sensorData.set("heading_accuracy", event.values[4]);
-                } else if (sensorType == Sensor.TYPE_GAME_ROTATION_VECTOR) {
-                    sensorData.set("x", event.values[0]);
-                    sensorData.set("y", event.values[1]);
-                    sensorData.set("z", event.values[2]);
-                    sensorData.set("cos", event.values[3]);
-                } else if (sensorType == Sensor.TYPE_STATIONARY_DETECT) {
-                    sensorData.set("stationary", event.values[0]);
-                } else if (sensorType == Sensor.TYPE_PROXIMITY) {
-                    sensorData.set("proximity", event.values[0]);
-                } else if (sensorType == Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT) {
-                    sensorData.set("state", event.values[0]);
-                } else if (sensorType == Sensor.TYPE_HEART_RATE) {
-                    sensorData.set("heart_rate", event.values[0]);
+                ArrayList<Float> dataList = new ArrayList<>();
+                for (float f : event.values) {
+                    dataList.add(Float.valueOf(f));
                 }
-
                 // create new SensorServiceData
-                SensorServiceData data = new SensorServiceData(
+                PSDSData.SensorData data = new PSDSData.SensorData(
                         event.sensor.getType(),
                         event.timestamp,
-                        sensorData
+                        dataList
                 );
-
                 SensorService.sensorServiceDataList.add(data);
             }
         }
@@ -319,7 +290,7 @@ public class SensorService extends Service {
 
             mGravity = mSensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY);
             if (mGravity != null)
-                mSensorManager.registerListener(mListener, mGravity, SensorManager.SENSOR_DELAY_NORMAL, 50000000);
+                mSensorManager.registerListener(mListener, mGravity, delay, 50000000);
 
             mMagneticField = mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
             if (mMagneticField != null)
