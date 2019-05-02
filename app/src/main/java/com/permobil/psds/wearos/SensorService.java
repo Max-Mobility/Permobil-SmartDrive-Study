@@ -75,7 +75,7 @@ public class SensorService extends Service {
         Log.d(TAG, "Kinvey Client from App.java found and set in service.");
 
         // Get the Kinvey Data Collection for storing data
-        this.psdsDataStore = DataStore.collection("PSDSData", PSDSData.class, StoreType.SYNC, mKinveyClient);
+        this.psdsDataStore = DataStore.collection("PSDSData", PSDSData.class, StoreType.AUTO, mKinveyClient);
         Log.d(TAG, "PSDSDataStore: " + this.psdsDataStore.getCollectionName());
 
         // Get the LocationManager so we can send last known location with the record
@@ -222,10 +222,16 @@ public class SensorService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        Log.d(TAG, "SensorService onDestroy()...");
         if (this.mWakeLock != null) {
             Log.d(TAG, "Releasing wakelock for SensorService.");
             this.mWakeLock.release();
         }
+
+        Log.d(TAG, "Creating the broadcast intent to restart the service...");
+        Intent broadcastIntent = new Intent(this, SensorRestarterBroadcastReceiver.class);
+        sendBroadcast(broadcastIntent);
+        Log.d(TAG, "broadcast intent has been broadcast!!!");
 
         // remove handler tasks
         mHandler.removeCallbacks(mHandlerTask);
