@@ -32,6 +32,8 @@ import com.kinvey.java.store.StoreType;
 
 import java.util.ArrayList;
 
+import io.sentry.Sentry;
+import io.sentry.event.UserBuilder;
 
 public class SensorService extends Service {
 
@@ -59,16 +61,13 @@ public class SensorService extends Service {
         throw new UnsupportedOperationException("Not yet implemented");
     }
 
-
     @Override
     public void onCreate() {
         super.onCreate();
         Log.d(TAG, "SensorService onCreate...");
         @SuppressLint("HardwareIds")
-        String uuid = android.provider.Settings.Secure.getString(
-                getContentResolver(),
-                android.provider.Settings.Secure.ANDROID_ID
-        );
+        String uuid = android.provider.Settings.Secure.getString(getContentResolver(),
+                android.provider.Settings.Secure.ANDROID_ID);
         this.deviceUUID = uuid;
         this.mHandler = new Handler();
 
@@ -79,16 +78,25 @@ public class SensorService extends Service {
         this.psdsDataStore = DataStore.collection("PSDSData", PSDSData.class, StoreType.SYNC, mKinveyClient);
         Log.d(TAG, "PSDSDataStore: " + this.psdsDataStore.getCollectionName());
 
-        // Get the LocationManager so we can send last known location with the record when saving to Kinvey
+        // Get the LocationManager so we can send last known location with the record
+        // when saving to Kinvey
         mLocationManager = (LocationManager) getApplicationContext().getSystemService(Context.LOCATION_SERVICE);
         Log.d(TAG, "Location Manager: " + mLocationManager);
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        // user identifier should always be in sharedPreferences
+        userIdentifier = getSharedPreferences(getString(R.string.shared_preference_file_key), Context.MODE_PRIVATE)
+                .getString(Constants.SAVED_STUDY_ID, "");
+
+        // Set the user in the current context.
+        Sentry.getContext().setUser(new UserBuilder().setId(userIdentifier).build());
+
         int sensorDelay;
         int maxReportingLatency;
-        // the intent that starts the service can pass the sensor delay and Max Reporting Latency
+        // the intent that starts the service can pass the sensor delay and Max
+        // Reporting Latency
         Bundle extras = intent.getExtras();
         if (extras != null) {
             // check for sensor delay from intent
@@ -97,11 +105,9 @@ public class SensorService extends Service {
             // check for reporting delay
             int reportingDelay = extras.getInt(Constants.MAX_REPORTING_DELAY, 0);
             maxReportingLatency = reportingDelay != 0 ? reportingDelay : 1000000; // 1 seconds default between sensor updates
-            userIdentifier = getSharedPreferences(getString(R.string.shared_preference_file_key), Context.MODE_PRIVATE).getString(Constants.SAVED_STUDY_ID, "");
         } else {
             sensorDelay = 40000; // 40000 us or 40 ms delay
             maxReportingLatency = 1000000; // 1 seconds between sensor updates
-            userIdentifier = null;
         }
 
         // Handle wake_lock so data collection can continue even when screen turns off
@@ -129,7 +135,8 @@ public class SensorService extends Service {
         mHandlerTask.run();
         mPushTask.run();
 
-        return START_STICKY; // START_STICKY is used for services that are explicitly started and stopped as needed
+        return START_STICKY; // START_STICKY is used for services that are explicitly started and stopped as
+        // needed
     }
 
     private void _PushDataToKinveyRemote() {
@@ -144,15 +151,15 @@ public class SensorService extends Service {
             @Override
             public void onSuccess(KinveyPushResponse kinveyPushResponse) {
                 isPushing = false;
-                Log.d(TAG, "Data pushed to Kinvey successfully. Check Kinvey console. Success Count = " + kinveyPushResponse.getSuccessCount());
+                Log.d(TAG, "Data pushed to Kinvey successfully. Check Kinvey console. Success Count = "
+                        + kinveyPushResponse.getSuccessCount());
                 sendMessageToActivity("Data service syncing data to backend successfully.");
             }
 
             @Override
             public void onFailure(Throwable throwable) {
                 isPushing = false;
-                Log.e(TAG, "Kinvey push failure message" +
-                        ": " + throwable.getMessage());
+                Log.e(TAG, "Kinvey push failure message" + ": " + throwable.getMessage());
                 Log.e(TAG, "Kinvey push failure cause: " + throwable.getCause());
                 sendMessageToActivity(throwable.getMessage());
             }
@@ -203,10 +210,12 @@ public class SensorService extends Service {
                 @Override
                 public void onFailure(Throwable error) {
                     Log.e(TAG, "Failed to save to Kinvey: " + error.getMessage());
+                    Sentry.capture(error);
                 }
             });
         } catch (KinveyException ke) {
             Log.e(TAG, "Error saving kinvey record for sensor data. " + ke.getReason());
+            Sentry.capture(ke);
         }
     }
 
@@ -231,11 +240,7 @@ public class SensorService extends Service {
                     dataList.add(Float.valueOf(f));
                 }
                 // create new SensorServiceData
-                PSDSData.SensorData data = new PSDSData.SensorData(
-                        event.sensor.getType(),
-                        event.timestamp,
-                        dataList
-                );
+                PSDSData.SensorData data = new PSDSData.SensorData(event.sensor.getType(), event.timestamp, dataList);
                 SensorService.sensorServiceDataList.add(data);
             }
         }
@@ -248,8 +253,7 @@ public class SensorService extends Service {
     }
 
     private boolean _registerDeviceSensors(int delay, int reportingLatency) {
-        SensorManager mSensorManager = (SensorManager) getApplicationContext()
-                .getSystemService(SENSOR_SERVICE);
+        SensorManager mSensorManager = (SensorManager) getApplicationContext().getSystemService(SENSOR_SERVICE);
         // make sure we have the sensor manager for the device
         if (mSensorManager != null) {
             Log.d(TAG, "Creating sensor listener...");
@@ -309,5 +313,3 @@ public class SensorService extends Service {
     }
 
 }
-
-

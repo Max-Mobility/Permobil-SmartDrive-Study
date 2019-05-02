@@ -10,6 +10,9 @@ import com.kinvey.java.core.KinveyClientCallback;
 
 import java.io.IOException;
 
+import io.sentry.Sentry;
+import io.sentry.android.AndroidSentryClientFactory;
+import io.sentry.event.BreadcrumbBuilder;
 
 public class App extends Application {
     private Client sharedClient;
@@ -19,6 +22,17 @@ public class App extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+        // Setup Sentry logging, uses `sentry.properties`
+        Sentry.init(new AndroidSentryClientFactory(getApplicationContext()));
+
+          /*
+         Record a breadcrumb in the current context which will be sent
+         with the next event(s). By default the last 100 breadcrumbs are kept.
+         */
+        Sentry.getContext().recordBreadcrumb(
+                new BreadcrumbBuilder().setMessage("Permobil Study Data Collector app started.").build()
+        );
+
         sharedClient = new Client.Builder(this).build();
 //        sharedClient.enableDebugLogging();
 
@@ -41,6 +55,15 @@ public class App extends Application {
                 e.printStackTrace();
             }
         }
+
+        Thread.setDefaultUncaughtExceptionHandler(
+                new Thread.UncaughtExceptionHandler() {
+                    @Override
+                    public void uncaughtException(Thread thread, Throwable e) {
+                        Log.e(TAG, e.getMessage());
+                        Sentry.capture(e);
+                    }
+                });
 
     }
 
