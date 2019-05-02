@@ -7,7 +7,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.support.wearable.activity.WearableActivity;
 import android.util.Log;
@@ -28,6 +27,7 @@ public class MainActivity extends WearableActivity {
     private Button mSubmitBtn;
     private Button mPermissionsButton;
     private TextView mServiceStatusText;
+    private TextView mStudyIdText;
     private SharedPreferences sharedPref;
     private BroadcastReceiver mMessageReceiver;
     private boolean isServiceRunning;
@@ -63,6 +63,7 @@ public class MainActivity extends WearableActivity {
         sharedPref = getSharedPreferences(getString(R.string.shared_preference_file_key), Context.MODE_PRIVATE);
         mServiceStatusText = findViewById(R.id.serviceStatusText);
         mTextView = findViewById(R.id.studyId);
+        mStudyIdText = findViewById(R.id.studyIdTxt);
         mSubmitBtn = findViewById(R.id.submitBtn);
         mSubmitBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -109,6 +110,9 @@ public class MainActivity extends WearableActivity {
         // check if user already has entered study ID
         String savedStudyId = sharedPref.getString(Constants.SAVED_STUDY_ID, "");
         Log.d(TAG, "Saved study id: " + savedStudyId);
+        if (!savedStudyId.equals("")) {
+            mStudyIdText.setText(String.format("Study ID: %s", savedStudyId)); // set the study id for text view to show user their current study ID
+        }
 
         // we have a study id for the device so just start the service to collect data
         if (!savedStudyId.equals("")) {
@@ -121,6 +125,7 @@ public class MainActivity extends WearableActivity {
                 mSubmitBtn.setVisibility(View.GONE);
                 mTextView.setVisibility(View.GONE);
                 mServiceStatusText.setVisibility(View.GONE);
+                mStudyIdText.setVisibility(View.GONE);
             }
         } else {
             // lets handle permissions first then allow for study ID to be input
@@ -131,6 +136,7 @@ public class MainActivity extends WearableActivity {
                 // let user input the study ID here
                 mPermissionsButton.setVisibility(View.GONE);
                 mServiceStatusText.setVisibility(View.GONE);
+                mStudyIdText.setVisibility(View.GONE);
                 mTextView.setVisibility(View.VISIBLE);
                 mSubmitBtn.setVisibility(View.VISIBLE);
             } else {
@@ -150,19 +156,11 @@ public class MainActivity extends WearableActivity {
         switch (requestCode) {
             case STORAGE_PERMISSION_VALUE: {
                 // If request is cancelled, the result arrays are empty.
-                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    hasStoragePermission = true;
-                } else {
-                    hasStoragePermission = false;
-                }
+                hasStoragePermission = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
             }
             case LOCATION_PERMSSION_VALUE: {
                 // If request is cancelled, the result arrays are empty.
-                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    hasLocationPermission = true;
-                } else {
-                    hasLocationPermission = false;
-                }
+                hasLocationPermission = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
             }
         }
     }
@@ -218,6 +216,7 @@ public class MainActivity extends WearableActivity {
         mPermissionsButton.setVisibility(View.GONE);
         mServiceStatusText.setVisibility(View.VISIBLE);
         mServiceStatusText.setText("Data collection service is running normally.");
+        mStudyIdText.setVisibility(View.VISIBLE);
     }
 
 }

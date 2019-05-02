@@ -31,6 +31,16 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical" >
 
+                    <TextView
+                        android:id="@+id/studyIdTxt"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/roboto"
+                        android:paddingBottom="4dp"
+                        android:text="TextView"
+                        android:textAlignment="center"
+                        android:textSize="18sp" />
+
                     <EditText
                         android:id="@+id/studyId"
                         android:layout_width="match_parent"
@@ -41,7 +51,9 @@
                         android:id="@+id/serviceStatusText"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="@string/service_status_normal" />
+                        android:fontFamily="@font/roboto_bold_italic"
+                        android:text="@string/service_status_normal"
+                        android:textAlignment="center" />
 
                     <Space
                         android:layout_width="match_parent"
