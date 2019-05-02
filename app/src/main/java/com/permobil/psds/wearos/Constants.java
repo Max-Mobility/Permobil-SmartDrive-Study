@@ -1,6 +1,8 @@
 package com.permobil.psds.wearos;
 
 public class Constants {
+    public static final String NOTIFICATION_CHANNEL = "com.permobil.psds.wearos.notification_channel";
+    public static final String ACTION_START_SERVICE = "ACTION_START_SERVICE";
     public static final String SENSOR_DELAY = "SENSOR_DELAY";
     public static final String MAX_REPORTING_DELAY = "MAX_REPORTING_DELAY";
     public static final String USER_IDENTIFIER = "USER_IDENTIFIER";
