@@ -2,17 +2,22 @@ package com.permobil.psds.wearos;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.location.Location;
 import android.location.LocationManager;
-import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.PowerManager;
@@ -20,6 +25,7 @@ import android.os.PowerManager.WakeLock;
 import android.util.Log;
 
 import androidx.core.app.ActivityCompat;
+import androidx.core.app.NotificationCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.kinvey.android.Client;
@@ -38,6 +44,9 @@ import io.sentry.event.UserBuilder;
 public class SensorService extends Service {
 
     private static final String TAG = "PermobilSensorService";
+    private static final int NOTIFICATION_ID = 543;
+    private static final int sensorDelay = 40000; // 40000 us or 40 ms delay
+    private static final int maxReportingLatency = 1000000; // 1 seconds between sensor updates
 
     private DataStore<PSDSData> psdsDataStore;
     private Handler mHandler;
@@ -50,6 +59,7 @@ public class SensorService extends Service {
     private SensorEventListener mListener;
 
     public boolean isPushing = false;
+    public static boolean isServiceRunning = false;
     public static ArrayList<PSDSData.SensorData> sensorServiceDataList = new ArrayList<>();
 
     public SensorService() {
@@ -64,6 +74,8 @@ public class SensorService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        startServiceWithNotification();
+
         Log.d(TAG, "SensorService onCreate...");
         @SuppressLint("HardwareIds")
         String uuid = android.provider.Settings.Secure.getString(getContentResolver(),
@@ -93,23 +105,6 @@ public class SensorService extends Service {
         // Set the user in the current context.
         Sentry.getContext().setUser(new UserBuilder().setId(userIdentifier).build());
 
-        int sensorDelay;
-        int maxReportingLatency;
-        // the intent that starts the service can pass the sensor delay and Max
-        // Reporting Latency
-        Bundle extras = intent.getExtras();
-        if (extras != null) {
-            // check for sensor delay from intent
-            int delay = extras.getInt(Constants.SENSOR_DELAY, 0);
-            sensorDelay = delay != 0 ? delay : 40000; // 40000 us or 40 ms delay
-            // check for reporting delay
-            int reportingDelay = extras.getInt(Constants.MAX_REPORTING_DELAY, 0);
-            maxReportingLatency = reportingDelay != 0 ? reportingDelay : 1000000; // 1 seconds default between sensor updates
-        } else {
-            sensorDelay = 40000; // 40000 us or 40 ms delay
-            maxReportingLatency = 1000000; // 1 seconds between sensor updates
-        }
-
         // Handle wake_lock so data collection can continue even when screen turns off
         // without wake_lock the service will stop bc the CPU gives up
         this._handleWakeLockSetup();
@@ -134,6 +129,12 @@ public class SensorService extends Service {
 
         mSaveTask.run();
         mPushTask.run();
+
+        if (intent != null && intent.getAction().equals(Constants.ACTION_START_SERVICE)) {
+            startServiceWithNotification();
+        } else {
+            stopMyService();
+        }
 
         return START_STICKY; // START_STICKY is used for services that are explicitly started and stopped as
         // needed
@@ -226,6 +227,7 @@ public class SensorService extends Service {
 
     @Override
     public void onDestroy() {
+        isServiceRunning = false;
         super.onDestroy();
         if (this.mWakeLock != null) {
             Log.d(TAG, "Releasing wakelock for SensorService.");
@@ -316,6 +318,47 @@ public class SensorService extends Service {
         // You can also include some extra data.
         intent.putExtra(Constants.SENSOR_SERVICE_MESSAGE, msg);
         LocalBroadcastManager.getInstance(getApplicationContext()).sendBroadcast(intent);
+    }
+
+
+    private void startServiceWithNotification() {
+        if (isServiceRunning) return;
+        isServiceRunning = true;
+
+        Intent notificationIntent = new Intent(getApplicationContext(), MainActivity.class);
+        notificationIntent.setAction(Constants.ACTION_START_SERVICE);  // A string containing the action name
+        notificationIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        PendingIntent contentPendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, 0);
+
+        Bitmap icon = BitmapFactory.decodeResource(getResources(), R.mipmap.ic_launcher_round);
+
+        // create the notification channel
+        NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        String channelId = Constants.NOTIFICATION_CHANNEL;
+        int importance = NotificationManager.IMPORTANCE_HIGH;
+        NotificationChannel notificationChannel = new NotificationChannel(channelId, Constants.NOTIFICATION_CHANNEL, importance);
+        notificationChannel.enableLights(false);
+        notificationChannel.enableVibration(false);
+        notificationManager.createNotificationChannel(notificationChannel);
+
+        Notification notification = new NotificationCompat.Builder(this, Constants.NOTIFICATION_CHANNEL)
+                .setContentTitle(getResources().getString(R.string.app_name))
+                .setTicker(getResources().getString(R.string.app_name))
+                .setContentText("Permobil Sensor Data Study is collecting data.")
+                .setSmallIcon(R.mipmap.ic_launcher_round)
+                .setLargeIcon(Bitmap.createScaledBitmap(icon, 128, 128, false))
+                .setContentIntent(contentPendingIntent)
+                .setOngoing(true)
+                .setChannelId(channelId)
+                .build();
+        notification.flags = notification.flags | Notification.FLAG_NO_CLEAR; // NO_CLEAR makes the notification stay when the user performs a "delete all" command
+        startForeground(NOTIFICATION_ID, notification);
+    }
+
+    private void stopMyService() {
+        stopForeground(true);
+        stopSelf();
+        isServiceRunning = false;
     }
 
 }
