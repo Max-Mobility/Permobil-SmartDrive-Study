@@ -145,6 +145,11 @@ public class SensorService extends Service {
             Log.d(TAG, "already pushing");
             return;
         }
+        if (psdsDataStore.syncCount() == 0) {
+            Log.d(TAG, "no data needs pushing - clearing the data store");
+            psdsDataStore.clear();
+            return;
+        }
         isPushing = true;
         // Push data to Kinvey backend.
         psdsDataStore.push(new KinveyPushCallback() {
