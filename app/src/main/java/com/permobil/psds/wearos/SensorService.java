@@ -45,7 +45,7 @@ public class SensorService extends Service {
     private String userIdentifier;
     private String deviceUUID;
     private LocationManager mLocationManager;
-    private Runnable mHandlerTask;
+    private Runnable mSaveTask;
     private Runnable mPushTask;
     private SensorEventListener mListener;
 
@@ -117,11 +117,11 @@ public class SensorService extends Service {
         boolean didRegisterSensors = this._registerDeviceSensors(sensorDelay, maxReportingLatency);
         Log.d(TAG, "Did register Sensors: " + didRegisterSensors);
 
-        mHandlerTask = new Runnable() {
+        mSaveTask = new Runnable() {
             @Override
             public void run() {
                 _SaveDataToKinveyLocal();
-                mHandler.postDelayed(mHandlerTask, 10 * 1000);
+                mHandler.postDelayed(mSaveTask, 10 * 1000);
             }
         };
         mPushTask = new Runnable() {
@@ -132,7 +132,7 @@ public class SensorService extends Service {
             }
         };
 
-        mHandlerTask.run();
+        mSaveTask.run();
         mPushTask.run();
 
         return START_STICKY; // START_STICKY is used for services that are explicitly started and stopped as
@@ -228,7 +228,8 @@ public class SensorService extends Service {
         }
 
         // remove handler tasks
-        mHandler.removeCallbacks(mHandlerTask);
+        mHandler.removeCallbacks(mSaveTask);
+        mHandler.removeCallbacks(mPushTask);
     }
 
     public class SensorListener implements SensorEventListener {
