@@ -44,8 +44,10 @@ public class SensorService extends Service {
     private String deviceUUID;
     private LocationManager mLocationManager;
     private Runnable mHandlerTask;
+    private Runnable mPushTask;
     private SensorEventListener mListener;
 
+    public boolean isPushing = false;
     public static ArrayList<PSDSData.SensorData> sensorServiceDataList = new ArrayList<>();
 
     public SensorService() {
@@ -94,11 +96,11 @@ public class SensorService extends Service {
             sensorDelay = delay != 0 ? delay : 40000; // 40000 us or 40 ms delay
             // check for reporting delay
             int reportingDelay = extras.getInt(Constants.MAX_REPORTING_DELAY, 0);
-            maxReportingLatency = reportingDelay != 0 ? reportingDelay : 50000000;
+            maxReportingLatency = reportingDelay != 0 ? reportingDelay : 1000000; // 1 seconds default between sensor updates
             userIdentifier = getSharedPreferences(getString(R.string.shared_preference_file_key), Context.MODE_PRIVATE).getString(Constants.SAVED_STUDY_ID, "");
         } else {
             sensorDelay = 40000; // 40000 us or 40 ms delay
-            maxReportingLatency = 50000000;
+            maxReportingLatency = 1000000; // 1 seconds between sensor updates
             userIdentifier = null;
         }
 
@@ -112,18 +114,58 @@ public class SensorService extends Service {
         mHandlerTask = new Runnable() {
             @Override
             public void run() {
-                _UploadDataToKinvey();
-                mHandler.postDelayed(mHandlerTask, 60 * 1000);
+                _SaveDataToKinveyLocal();
+                mHandler.postDelayed(mHandlerTask, 10 * 1000);
+            }
+        };
+        mPushTask = new Runnable() {
+            @Override
+            public void run() {
+                _PushDataToKinveyRemote();
+                mHandler.postDelayed(mPushTask, 60 * 1000);
             }
         };
 
         mHandlerTask.run();
+        mPushTask.run();
 
         return START_STICKY; // START_STICKY is used for services that are explicitly started and stopped as needed
     }
 
-    private void _UploadDataToKinvey() {
-        Log.d(TAG, "_UploadDataToKinvey()...");
+    private void _PushDataToKinveyRemote() {
+        Log.d(TAG, "_PushDataToKinveyRemote()...");
+        if (isPushing) {
+            Log.d(TAG, "already pushing");
+            return;
+        }
+        isPushing = true;
+        // Push data to Kinvey backend.
+        psdsDataStore.push(new KinveyPushCallback() {
+            @Override
+            public void onSuccess(KinveyPushResponse kinveyPushResponse) {
+                isPushing = false;
+                Log.d(TAG, "Data pushed to Kinvey successfully. Check Kinvey console. Success Count = " + kinveyPushResponse.getSuccessCount());
+                sendMessageToActivity("Data service syncing data to backend successfully.");
+            }
+
+            @Override
+            public void onFailure(Throwable throwable) {
+                isPushing = false;
+                Log.e(TAG, "Kinvey push failure message" +
+                        ": " + throwable.getMessage());
+                Log.e(TAG, "Kinvey push failure cause: " + throwable.getCause());
+                sendMessageToActivity(throwable.getMessage());
+            }
+
+            @Override
+            public void onProgress(long current, long all) {
+                Log.d(TAG, "Kinvey push progress: " + current + " / " + all);
+            }
+        });
+    }
+
+    private void _SaveDataToKinveyLocal() {
+        Log.d(TAG, "_SaveDataToKinveyLocal()...");
         // adding an empty check to avoid pushing the initial service starting records with no sensor_data since the intervals haven't clocked at that time
         if (sensorServiceDataList.isEmpty()) {
             Log.d(TAG, "Sensor data list is empty, so will not save/push this record.");
@@ -155,28 +197,7 @@ public class SensorService extends Service {
             psdsDataStore.save(data, new KinveyClientCallback<PSDSData>() {
                 @Override
                 public void onSuccess(PSDSData result) {
-                    Log.d(TAG, "Entity saved to local Kinvey client: " + result);
-                    // Push data to Kinvey backend.
-                    psdsDataStore.push(new KinveyPushCallback() {
-                        @Override
-                        public void onSuccess(KinveyPushResponse kinveyPushResponse) {
-                            Log.d(TAG, "Data pushed to Kinvey successfully. Check Kinvey console.");
-                            sendMessageToActivity("Data service syncing data to backend successfully.");
-                        }
-
-                        @Override
-                        public void onFailure(Throwable throwable) {
-                            Log.e(TAG, "Kinvey push failure message" +
-                                    ": " + throwable.getMessage());
-                            Log.e(TAG, "Kinvey push failure cause: " + throwable.getCause());
-                            sendMessageToActivity(throwable.getMessage());
-                        }
-
-                        @Override
-                        public void onProgress(long current, long all) {
-                            Log.d(TAG, "Kinvey push progress: " + current);
-                        }
-                    });
+                    Log.d(TAG, "Entity saved to local Kinvey client");
                 }
 
                 @Override
@@ -241,7 +262,7 @@ public class SensorService extends Service {
 
             Sensor mGravity = mSensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY);
             if (mGravity != null)
-                mSensorManager.registerListener(mListener, mGravity, delay, 50000000);
+                mSensorManager.registerListener(mListener, mGravity, delay, reportingLatency);
 
             Sensor mMagneticField = mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
             if (mMagneticField != null)
