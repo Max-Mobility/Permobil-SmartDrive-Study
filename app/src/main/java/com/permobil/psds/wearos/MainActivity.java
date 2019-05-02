@@ -206,8 +206,8 @@ public class MainActivity extends WearableActivity {
 
     private void startSensorService(String studyId) {
         Intent i = new Intent(MainActivity.this, SensorService.class);
-        i.putExtra(Constants.SENSOR_DELAY, 40000); // 40000 us or 40 ms delay
-        i.putExtra(Constants.MAX_REPORTING_DELAY, 1000000); // 1000000 us or 1 s max delay
+        i.setAction(Constants.ACTION_START_SERVICE);
+
         startService(i);
         Log.d(TAG, "SensorService has been started successfully with study ID: " + studyId);
         isServiceRunning = true;
