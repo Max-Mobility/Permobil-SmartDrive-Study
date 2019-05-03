@@ -16,6 +16,8 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.hardware.TriggerEvent;
+import android.hardware.TriggerEventListener;
 import android.location.Location;
 import android.location.LocationManager;
 import android.os.Handler;
@@ -46,8 +48,8 @@ public class SensorService extends Service {
 
     private static final String TAG = "PermobilSensorService";
     private static final int NOTIFICATION_ID = 543;
-    private static final int sensorDelay = 100000;
-    private static final int maxReportingLatency = 1000000; // 1 seconds between sensor updates
+    private static final int sensorDelay = 100000; // 100000 us or 100 ms delay
+    private static final int maxReportingLatency = 10000000; // 10 seconds between sensor updates
 
     private Builder notificationBuilder;
     private NotificationManager notificationManager;
@@ -59,7 +61,15 @@ public class SensorService extends Service {
     private String deviceUUID;
     private LocationManager mLocationManager;
     private Runnable mKinveyTask;
+    private TriggerSensorListener mTriggerListener;
     private SensorEventListener mListener;
+    private SensorManager mSensorManager;
+
+    private Sensor mSignificantMotion;
+
+    // activity detection
+    public boolean personIsActive = false;
+    public boolean watchBeingWorn = false;
 
     public static boolean isServiceRunning = false;
     public static ArrayList<PSDSData.SensorData> sensorServiceDataList = new ArrayList<>();
@@ -214,6 +224,18 @@ public class SensorService extends Service {
         mHandler.removeCallbacks(mKinveyTask);
     }
 
+    public class TriggerSensorListener extends TriggerEventListener {
+        @Override
+        public void onTrigger(TriggerEvent event) {
+            if (event.sensor.getType() == Sensor.TYPE_SIGNIFICANT_MOTION) {
+                //Log.d(TAG, "Significant motion detected!");
+                //sendMessageToActivity("Significant Motion Detected!");
+                personIsActive = true;
+                mSensorManager.requestTriggerSensor(this, mSignificantMotion);
+            }
+        }
+    }
+
     public class SensorListener implements SensorEventListener {
         @Override
         public void onSensorChanged(SensorEvent event) {
@@ -222,9 +244,12 @@ public class SensorService extends Service {
                 for (float f : event.values) {
                     dataList.add(f);
                 }
-                // create new SensorServiceData
-                PSDSData.SensorData data = new PSDSData.SensorData(event.sensor.getType(), event.timestamp, dataList);
-                SensorService.sensorServiceDataList.add(data);
+                updateActivity(event);
+                if (hasBeenActive()) {
+                    // create new SensorServiceData
+                    PSDSData.SensorData data = new PSDSData.SensorData(event.sensor.getType(), event.timestamp, dataList);
+                    SensorService.sensorServiceDataList.add(data);
+                }
             }
         }
 
@@ -233,14 +258,34 @@ public class SensorService extends Service {
             // TODO Auto-generated method stub
         }
 
+        public void updateActivity(SensorEvent event) {
+            // check if the watch is moving
+            if (event.sensor.getType() == Sensor.TYPE_MOTION_DETECT) {
+                personIsActive = true;
+            } else if (event.sensor.getType() == Sensor.TYPE_STATIONARY_DETECT) {
+                personIsActive = false;
+            }
+            // check if the user is wearing the watch
+            if (event.sensor.getType() == Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT) {
+                watchBeingWorn = (event.values[0] != 0.0); // 1.0 => device is on body, 0.0 => device is off body
+                //sendMessageToActivity("OFF_BODY Change: "+watchBeingWorn);
+            }
+        }
+
+        public boolean hasBeenActive() {
+            //Log.d(TAG, "PersonIsActive: " + personIsActive + "; watchBeingWorn: " + watchBeingWorn);
+            return personIsActive && watchBeingWorn;
+        }
+
     }
 
     private boolean _registerDeviceSensors(int delay, int reportingLatency) {
-        SensorManager mSensorManager = (SensorManager) getApplicationContext().getSystemService(SENSOR_SERVICE);
+        mSensorManager = (SensorManager) getApplicationContext().getSystemService(SENSOR_SERVICE);
         // make sure we have the sensor manager for the device
         if (mSensorManager != null) {
             Log.d(TAG, "Creating sensor listener...");
             mListener = new SensorListener();
+            mTriggerListener = new TriggerSensorListener();
 
             // register all the sensors we want to track data for
             Sensor mLinearAcceleration = mSensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION);
@@ -268,12 +313,35 @@ public class SensorService extends Service {
                 mSensorManager.registerListener(mListener, mGyroscope, delay, reportingLatency);
 
             Sensor mProximity = mSensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
-            if (mProximity != null)
+            if (mProximity != null) {
                 mSensorManager.registerListener(mListener, mProximity, delay, reportingLatency);
+                //Log.d(TAG, "Have TYPE_PROXIMITY");
+            }
 
             Sensor mOffBodyDetect = mSensorManager.getDefaultSensor(Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT);
             if (mOffBodyDetect != null)
                 mSensorManager.registerListener(mListener, mOffBodyDetect, delay, reportingLatency);
+
+            //Log.d(TAG, "Checking TYPE_STATIONARY_DETECT");
+            Sensor mStationaryDetect = mSensorManager.getDefaultSensor(Sensor.TYPE_STATIONARY_DETECT);
+            if (mStationaryDetect != null) {
+                mSensorManager.registerListener(mListener, mStationaryDetect, delay, reportingLatency);
+                Log.d(TAG, "Have TYPE_STATIONARY_DETECT");
+            }
+
+            //Log.d(TAG, "Checking TYPE_SIGNIFICANT_MOTION");
+            mSignificantMotion = mSensorManager.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION);
+            if (mSignificantMotion != null) {
+                mSensorManager.requestTriggerSensor(mTriggerListener, mSignificantMotion);
+                Log.d(TAG, "Have TYPE_SIGNIFICANT_MOTION");
+            }
+
+            //Log.d(TAG, "Checking TYPE_MOTION_DETECT");
+            Sensor mMotionDetect = mSensorManager.getDefaultSensor(Sensor.TYPE_MOTION_DETECT);
+            if (mMotionDetect != null) {
+                mSensorManager.registerListener(mListener, mMotionDetect, delay, reportingLatency);
+                //Log.d(TAG, "Have TYPE_MOTION_DETECT");
+            }
         } else {
             Log.e(TAG, "Sensor Manager was not found, so sensor service is unable to register sensor listener events.");
         }
