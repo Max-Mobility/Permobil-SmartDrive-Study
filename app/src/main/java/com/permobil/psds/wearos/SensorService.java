@@ -77,6 +77,8 @@ public class SensorService extends Service {
     public boolean personIsActive = false;
     public boolean watchBeingWorn = false;
 
+    public boolean isPushing = false;
+
     public static boolean isServiceRunning = false;
     public static ArrayList<PSDSData.SensorData> sensorServiceDataList = new ArrayList<>();
 
@@ -152,14 +154,21 @@ public class SensorService extends Service {
 
     private void _PushDataToKinvey() {
         Log.d(TAG, "_PushDataToKinvey()...");
-        if (psdsDataStore.syncCount() == 0) {
+        if (isPushing) {
+            return;
+        }
+        long numToSend = psdsDataStore.syncCount();
+        if (numToSend == 0) {
             Log.d(TAG, "No unsent data, clearing the storage.");
             psdsDataStore.clear(); // we have nothing unsent, clear the storage
             _UnregisterNetwork();
         } else {
+            isPushing = true;
+            Log.d(TAG, "Pushing to kinvey: " + numToSend);
             psdsDataStore.push(new KinveyPushCallback() {
                 @Override
                 public void onSuccess(KinveyPushResponse kinveyPushResponse) {
+                    isPushing = false;
                     Log.d(TAG, "Data pushed to Kinvey successfully. Success Count = "
                             + kinveyPushResponse.getSuccessCount());
                     sendMessageToActivity("Data service syncing data to backend successfully.");
@@ -168,6 +177,7 @@ public class SensorService extends Service {
 
                 @Override
                 public void onFailure(Throwable throwable) {
+                    isPushing = false;
                     Log.e(TAG, "Kinvey push failure message" + ": " + throwable.getMessage());
                     Log.e(TAG, "Kinvey push failure cause: " + throwable.getCause());
                     sendMessageToActivity(throwable.getMessage());
@@ -177,6 +187,7 @@ public class SensorService extends Service {
 
                 @Override
                 public void onProgress(long current, long all) {
+                    isPushing = true;
                     Log.d(TAG, "Kinvey push progress: " + current + " / " + all);
                 }
             });
@@ -263,6 +274,7 @@ public class SensorService extends Service {
     }
 
     public void _UnregisterNetwork() {
+        isPushing = false;
         Log.d(TAG, "Unbinding network");
         // unregister network
         mConnectivityManager.bindProcessToNetwork(null);
