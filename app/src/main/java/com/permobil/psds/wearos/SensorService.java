@@ -20,7 +20,10 @@ import android.hardware.TriggerEvent;
 import android.hardware.TriggerEventListener;
 import android.location.Location;
 import android.location.LocationManager;
-import android.net.wifi.WifiManager;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.PowerManager;
@@ -65,7 +68,8 @@ public class SensorService extends Service {
     private TriggerSensorListener mTriggerListener;
     private SensorEventListener mListener;
     private SensorManager mSensorManager;
-    private WifiManager mWifiManager;
+    private ConnectivityManager mConnectivityManager;
+    private NetworkCallback mNetworkCallback;
 
     private Sensor mSignificantMotion;
 
@@ -104,8 +108,10 @@ public class SensorService extends Service {
         // Get the LocationManager so we can send last known location with the record when saving to Kinvey
         mLocationManager = (LocationManager) getApplicationContext().getSystemService(Context.LOCATION_SERVICE);
 
-        // Get the WifiManager so we can turn on wifi before saving
-        mWifiManager = (WifiManager) this.getSystemService(Context.WIFI_SERVICE);
+        // Get the ConnectivityManager so we can turn on wifi before saving
+        mConnectivityManager = (ConnectivityManager) this.getSystemService(Context.CONNECTIVITY_SERVICE);
+        // save the callback we'll use
+        mNetworkCallback = new NetworkCallback();
     }
 
     @Override
@@ -133,8 +139,8 @@ public class SensorService extends Service {
         mKinveyTask = new Runnable() {
             @Override
             public void run() {
-                _SaveDataToKinvey();
-                mHandler.postDelayed(mKinveyTask, 5 * 60 * 1000); // save every 5 minutes
+                _RequestNetworkAndSend();
+                mHandler.postDelayed(mKinveyTask, 10 * 60 * 1000); // save every 10 minutes
             }
         };
 
@@ -149,13 +155,13 @@ public class SensorService extends Service {
         // adding an empty check to avoid pushing the initial service starting records with no sensor_data since the intervals haven't clocked at that time
         if (sensorServiceDataList.isEmpty()) {
             Log.d(TAG, "Sensor data list is empty, so will not save/push this record.");
+            _UnregisterNetwork();
             return;
         }
         if (psdsDataStore.syncCount() == 0) {
             Log.d(TAG, "No unsent data, clearing the storage.");
             psdsDataStore.clear(); // we have nothing unsent, clear the storage
         }
-        mWifiManager.setWifiEnabled(true);
         PSDSData data = new PSDSData();
         data.user_identifier = this.userIdentifier;
         data.device_uuid = this.deviceUUID;
@@ -188,6 +194,7 @@ public class SensorService extends Service {
                             Log.d(TAG, "Data pushed to Kinvey successfully. Success Count = "
                                     + kinveyPushResponse.getSuccessCount());
                             sendMessageToActivity("Data service syncing data to backend successfully.");
+                            _UnregisterNetwork();
                         }
 
                         @Override
@@ -196,6 +203,7 @@ public class SensorService extends Service {
                             Log.e(TAG, "Kinvey push failure cause: " + throwable.getCause());
                             sendMessageToActivity(throwable.getMessage());
                             Sentry.capture(throwable);
+                            _UnregisterNetwork();
                         }
 
                         @Override
@@ -211,6 +219,7 @@ public class SensorService extends Service {
                     Log.e(TAG, "Kinvey SAVE() Failure: " + throwable.getMessage());
                     sendMessageToActivity("Error saving data: " + throwable.getMessage());
                     Sentry.capture(throwable);
+                    _UnregisterNetwork();
                 }
             });
 
@@ -218,6 +227,7 @@ public class SensorService extends Service {
             Log.e(TAG, "Error saving kinvey record for sensor data. " + ke.getReason());
             sendMessageToActivity("Error trying to save data to backend: " + ke.getExplanation());
             Sentry.capture(ke);
+            _UnregisterNetwork();
         }
     }
 
@@ -232,6 +242,38 @@ public class SensorService extends Service {
 
         // remove handler tasks
         mHandler.removeCallbacks(mKinveyTask);
+    }
+
+    public void _RequestNetworkAndSend() {
+        NetworkRequest request = new NetworkRequest.Builder()
+                .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build();
+
+        mConnectivityManager.requestNetwork(request, mNetworkCallback);
+    }
+
+    public void _UnregisterNetwork() {
+        // unregister network
+        mConnectivityManager.bindProcessToNetwork(null);
+        mConnectivityManager.unregisterNetworkCallback(mNetworkCallback);
+    }
+
+    public class NetworkCallback extends ConnectivityManager.NetworkCallback {
+        @Override
+        public void onAvailable(Network network) {
+            if (mConnectivityManager.bindProcessToNetwork(network)) {
+                int bandwidth =
+                        mConnectivityManager.getNetworkCapabilities(network).getLinkDownstreamBandwidthKbps();
+                Log.d(TAG, "Bandwidth for network: " + bandwidth);
+                // we can use this network
+                _SaveDataToKinvey();
+            } else {
+                // app doesn't have android.permission.INTERNET permission
+            }
+        }
     }
 
     public class TriggerSensorListener extends TriggerEventListener {
