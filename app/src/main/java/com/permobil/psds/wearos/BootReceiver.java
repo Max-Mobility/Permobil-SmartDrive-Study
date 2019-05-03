@@ -12,7 +12,7 @@ public class BootReceiver extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
         Log.i(TAG, "AutoStart onReceive...");
 
-        context.startService(new Intent(context, SensorService.class));
+        // context.startService(new Intent(context, SensorService.class));
 
 //        if (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
 //            SensorService.enqueueWork(context, new Intent());
