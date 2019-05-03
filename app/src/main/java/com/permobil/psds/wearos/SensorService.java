@@ -20,6 +20,7 @@ import android.hardware.TriggerEvent;
 import android.hardware.TriggerEventListener;
 import android.location.Location;
 import android.location.LocationManager;
+import android.net.wifi.WifiManager;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.PowerManager;
@@ -64,6 +65,7 @@ public class SensorService extends Service {
     private TriggerSensorListener mTriggerListener;
     private SensorEventListener mListener;
     private SensorManager mSensorManager;
+    private WifiManager mWifiManager;
 
     private Sensor mSignificantMotion;
 
@@ -101,6 +103,9 @@ public class SensorService extends Service {
         this.psdsDataStore = DataStore.collection("PSDSData", PSDSData.class, StoreType.SYNC, mKinveyClient);
         // Get the LocationManager so we can send last known location with the record when saving to Kinvey
         mLocationManager = (LocationManager) getApplicationContext().getSystemService(Context.LOCATION_SERVICE);
+
+        // Get the WifiManager so we can turn on wifi before saving
+        mWifiManager = (WifiManager) this.getSystemService(Context.WIFI_SERVICE);
     }
 
     @Override
@@ -129,7 +134,7 @@ public class SensorService extends Service {
             @Override
             public void run() {
                 _SaveDataToKinvey();
-                mHandler.postDelayed(mKinveyTask, 60 * 1000);
+                mHandler.postDelayed(mKinveyTask, 5 * 60 * 1000); // save every 5 minutes
             }
         };
 
@@ -146,6 +151,11 @@ public class SensorService extends Service {
             Log.d(TAG, "Sensor data list is empty, so will not save/push this record.");
             return;
         }
+        if (psdsDataStore.syncCount() == 0) {
+            Log.d(TAG, "No unsent data, clearing the storage.");
+            psdsDataStore.clear(); // we have nothing unsent, clear the storage
+        }
+        mWifiManager.setWifiEnabled(true);
         PSDSData data = new PSDSData();
         data.user_identifier = this.userIdentifier;
         data.device_uuid = this.deviceUUID;
