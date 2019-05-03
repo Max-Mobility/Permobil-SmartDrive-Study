@@ -209,7 +209,7 @@ public class MainActivity extends WearableActivity {
         i.setAction(Constants.ACTION_START_SERVICE);
 
         // startForegroundService(i);
-       startService(i);
+        startService(i);
         Log.d(TAG, "SensorService has been started successfully with study ID: " + studyId);
         isServiceRunning = true;
         mTextView.setVisibility(View.GONE);
@@ -218,6 +218,7 @@ public class MainActivity extends WearableActivity {
         mServiceStatusText.setVisibility(View.VISIBLE);
         mServiceStatusText.setText("Data collection service is running normally.");
         mStudyIdText.setVisibility(View.VISIBLE);
+        mStudyIdText.setText(String.format("Study ID: %s", sharedPref.getString(Constants.SAVED_STUDY_ID, "")));
     }
 
 }
