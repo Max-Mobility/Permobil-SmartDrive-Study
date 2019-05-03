@@ -79,8 +79,8 @@ public class SensorService extends Service {
 
     public boolean isPushing = false;
 
-    public static boolean isServiceRunning = false;
-    public static ArrayList<PSDSData.SensorData> sensorServiceDataList = new ArrayList<>();
+    public boolean isServiceRunning = false;
+    public ArrayList<PSDSData.SensorData> sensorServiceDataList = new ArrayList<>();
 
     public SensorService() {
     }
@@ -114,42 +114,50 @@ public class SensorService extends Service {
         mConnectivityManager = (ConnectivityManager) this.getSystemService(Context.CONNECTIVITY_SERVICE);
         // save the callback we'll use
         mNetworkCallback = new NetworkCallback();
+
+        isServiceRunning = false;
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        // user identifier should always be in sharedPreferences
-        userIdentifier = getSharedPreferences(getString(R.string.shared_preference_file_key), Context.MODE_PRIVATE)
-                .getString(Constants.SAVED_STUDY_ID, "");
-        // Set the user in the current context.
-        Sentry.getContext().setUser(new UserBuilder().setId(userIdentifier).build());
+        Log.d(TAG, "onStartCommand()..." + intent + " - " + flags + " - " + startId);
+        Log.d(TAG, "isServiceRunning: " + isServiceRunning);
+        if (!isServiceRunning) {
+            // user identifier should always be in sharedPreferences
+            userIdentifier = getSharedPreferences(getString(R.string.shared_preference_file_key), Context.MODE_PRIVATE)
+                    .getString(Constants.SAVED_STUDY_ID, "");
+            // Set the user in the current context.
+            Sentry.getContext().setUser(new UserBuilder().setId(userIdentifier).build());
 
-        if (intent != null && Objects.requireNonNull(intent.getAction()).equals(Constants.ACTION_START_SERVICE)) {
-            startServiceWithNotification();
-        } else {
-            stopMyService();
-        }
+            if (intent != null && Objects.requireNonNull(intent.getAction()).equals(Constants.ACTION_START_SERVICE)) {
+                startServiceWithNotification();
 
-        // clear out any old info from last time we ran
-        isPushing = false;
+                Log.d(TAG, "starting service!");
 
-        // Handle wake_lock so data collection can continue even when screen turns off
-        // without wake_lock the service will stop bc the CPU gives up
-        this._handleWakeLockSetup();
+                // clear out any old info from last time we ran
+                isPushing = false;
 
-        boolean didRegisterSensors = this._registerDeviceSensors(sensorDelay, maxReportingLatency);
-        Log.d(TAG, "Did register Sensors: " + didRegisterSensors);
+                // Handle wake_lock so data collection can continue even when screen turns off
+                // without wake_lock the service will stop bc the CPU gives up
+                this._handleWakeLockSetup();
+
+                boolean didRegisterSensors = this._registerDeviceSensors(sensorDelay, maxReportingLatency);
+                Log.d(TAG, "Did register Sensors: " + didRegisterSensors);
 
 
-        mKinveyTask = new Runnable() {
-            @Override
-            public void run() {
-                _RequestNetworkAndSend();
-                mHandler.postDelayed(mKinveyTask, 10 * 60 * 1000); // save every 10 minutes
+                mKinveyTask = new Runnable() {
+                    @Override
+                    public void run() {
+                        _RequestNetworkAndSend();
+                        mHandler.postDelayed(mKinveyTask, 10 * 60 * 1000); // save every 10 minutes
+                    }
+                };
+
+                mKinveyTask.run();
+            } else {
+                stopMyService();
             }
-        };
-
-        mKinveyTask.run();
+        }
 
         return START_STICKY; // START_STICKY is used for services that are explicitly started and stopped as
         // needed
@@ -211,7 +219,7 @@ public class SensorService extends Service {
             data.device_uuid = this.deviceUUID;
             data.sensor_data = sensorServiceDataList;
             // reset the sensor data list for new values to be pushed into
-            SensorService.sensorServiceDataList = new ArrayList<>();
+            sensorServiceDataList = new ArrayList<>();
 
             // if we have location permission write the location to record, if not, just print WARNING to LogCat, not sure on best handling for UX right now.
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
@@ -329,7 +337,7 @@ public class SensorService extends Service {
                 if (hasBeenActive()) {
                     // create new SensorServiceData
                     PSDSData.SensorData data = new PSDSData.SensorData(event.sensor.getType(), event.timestamp, dataList);
-                    SensorService.sensorServiceDataList.add(data);
+                    sensorServiceDataList.add(data);
                 }
             }
         }
