@@ -52,8 +52,8 @@ public class SensorService extends Service {
 
     private static final String TAG = "PermobilSensorService";
     private static final int NOTIFICATION_ID = 543;
-    private static final int sensorDelay = 100000; // 100000 us or 100 ms delay
-    private static final int maxReportingLatency = 10000000; // 10 seconds between sensor updates
+    private static final int sensorDelay = 40000; // 40000 us or 40 ms delay
+    private static final int maxReportingLatency = 1000000; // 1 second between sensor updates
 
     private Builder notificationBuilder;
     private NotificationManager notificationManager;
@@ -150,84 +150,90 @@ public class SensorService extends Service {
         // needed
     }
 
+    private void _PushDataToKinvey() {
+        Log.d(TAG, "_PushDataToKinvey()...");
+        if (psdsDataStore.syncCount() == 0) {
+            Log.d(TAG, "No unsent data, clearing the storage.");
+            psdsDataStore.clear(); // we have nothing unsent, clear the storage
+            _UnregisterNetwork();
+        } else {
+            psdsDataStore.push(new KinveyPushCallback() {
+                @Override
+                public void onSuccess(KinveyPushResponse kinveyPushResponse) {
+                    Log.d(TAG, "Data pushed to Kinvey successfully. Success Count = "
+                            + kinveyPushResponse.getSuccessCount());
+                    sendMessageToActivity("Data service syncing data to backend successfully.");
+                    _UnregisterNetwork();
+                }
+
+                @Override
+                public void onFailure(Throwable throwable) {
+                    Log.e(TAG, "Kinvey push failure message" + ": " + throwable.getMessage());
+                    Log.e(TAG, "Kinvey push failure cause: " + throwable.getCause());
+                    sendMessageToActivity(throwable.getMessage());
+                    Sentry.capture(throwable);
+                    _UnregisterNetwork();
+                }
+
+                @Override
+                public void onProgress(long current, long all) {
+                    Log.d(TAG, "Kinvey push progress: " + current + " / " + all);
+                }
+            });
+        }
+    }
+
     private void _SaveDataToKinvey() {
         Log.d(TAG, "_SaveDataToKinvey()...");
         // adding an empty check to avoid pushing the initial service starting records with no sensor_data since the intervals haven't clocked at that time
         if (sensorServiceDataList.isEmpty()) {
             Log.d(TAG, "Sensor data list is empty, so will not save/push this record.");
-            _UnregisterNetwork();
-            return;
-        }
-        if (psdsDataStore.syncCount() == 0) {
-            Log.d(TAG, "No unsent data, clearing the storage.");
-            psdsDataStore.clear(); // we have nothing unsent, clear the storage
-        }
-        PSDSData data = new PSDSData();
-        data.user_identifier = this.userIdentifier;
-        data.device_uuid = this.deviceUUID;
-        data.sensor_data = sensorServiceDataList;
-        // reset the sensor data list for new values to be pushed into
-        SensorService.sensorServiceDataList = new ArrayList<>();
-
-        // if we have location permission write the location to record, if not, just print WARNING to LogCat, not sure on best handling for UX right now.
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            Log.w(TAG, "Unable to get device location because LOCATION permission has not been granted.");
-            data.location = null;
+            _PushDataToKinvey();
         } else {
-            Location loc = mLocationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-            if (loc != null) {
-                data.location = new PSDSLocation(loc.getLatitude(), loc.getLongitude(), loc.getTime());
-            } else {
+            PSDSData data = new PSDSData();
+            data.user_identifier = this.userIdentifier;
+            data.device_uuid = this.deviceUUID;
+            data.sensor_data = sensorServiceDataList;
+            // reset the sensor data list for new values to be pushed into
+            SensorService.sensorServiceDataList = new ArrayList<>();
+
+            // if we have location permission write the location to record, if not, just print WARNING to LogCat, not sure on best handling for UX right now.
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                Log.w(TAG, "Unable to get device location because LOCATION permission has not been granted.");
                 data.location = null;
+            } else {
+                Location loc = mLocationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+                if (loc != null) {
+                    data.location = new PSDSLocation(loc.getLatitude(), loc.getLongitude(), loc.getTime());
+                } else {
+                    data.location = null;
+                }
+                Log.d(TAG, "Data location: " + data.location);
             }
-            Log.d(TAG, "Data location: " + data.location);
-        }
 
-        try {
-            psdsDataStore.save(data, new KinveyClientCallback<PSDSData>() {
-                @Override
-                public void onSuccess(PSDSData result) {
-                    // Push data to Kinvey backend.
-                    psdsDataStore.push(new KinveyPushCallback() {
-                        @Override
-                        public void onSuccess(KinveyPushResponse kinveyPushResponse) {
-                            Log.d(TAG, "Data pushed to Kinvey successfully. Success Count = "
-                                    + kinveyPushResponse.getSuccessCount());
-                            sendMessageToActivity("Data service syncing data to backend successfully.");
-                            _UnregisterNetwork();
-                        }
+            try {
+                psdsDataStore.save(data, new KinveyClientCallback<PSDSData>() {
+                    @Override
+                    public void onSuccess(PSDSData result) {
+                        // Push data to Kinvey backend.
+                        _PushDataToKinvey();
+                    }
 
-                        @Override
-                        public void onFailure(Throwable throwable) {
-                            Log.e(TAG, "Kinvey push failure message" + ": " + throwable.getMessage());
-                            Log.e(TAG, "Kinvey push failure cause: " + throwable.getCause());
-                            sendMessageToActivity(throwable.getMessage());
-                            Sentry.capture(throwable);
-                            _UnregisterNetwork();
-                        }
+                    @Override
+                    public void onFailure(Throwable throwable) {
+                        Log.e(TAG, "Kinvey SAVE() Failure: " + throwable.getMessage());
+                        sendMessageToActivity("Error saving data: " + throwable.getMessage());
+                        Sentry.capture(throwable);
+                        _UnregisterNetwork();
+                    }
+                });
 
-                        @Override
-                        public void onProgress(long current, long all) {
-                            Log.d(TAG, "Kinvey push progress: " + current + " / " + all);
-                        }
-                    });
-
-                }
-
-                @Override
-                public void onFailure(Throwable throwable) {
-                    Log.e(TAG, "Kinvey SAVE() Failure: " + throwable.getMessage());
-                    sendMessageToActivity("Error saving data: " + throwable.getMessage());
-                    Sentry.capture(throwable);
-                    _UnregisterNetwork();
-                }
-            });
-
-        } catch (KinveyException ke) {
-            Log.e(TAG, "Error saving kinvey record for sensor data. " + ke.getReason());
-            sendMessageToActivity("Error trying to save data to backend: " + ke.getExplanation());
-            Sentry.capture(ke);
-            _UnregisterNetwork();
+            } catch (KinveyException ke) {
+                Log.e(TAG, "Error saving kinvey record for sensor data. " + ke.getReason());
+                sendMessageToActivity("Error trying to save data to backend: " + ke.getExplanation());
+                Sentry.capture(ke);
+                _UnregisterNetwork();
+            }
         }
     }
 
@@ -245,6 +251,7 @@ public class SensorService extends Service {
     }
 
     public void _RequestNetworkAndSend() {
+        Log.d(TAG, "Binding network");
         NetworkRequest request = new NetworkRequest.Builder()
                 .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
                 .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
@@ -256,6 +263,7 @@ public class SensorService extends Service {
     }
 
     public void _UnregisterNetwork() {
+        Log.d(TAG, "Unbinding network");
         // unregister network
         mConnectivityManager.bindProcessToNetwork(null);
         mConnectivityManager.unregisterNetworkCallback(mNetworkCallback);
