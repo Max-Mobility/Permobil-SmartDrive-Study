@@ -1,12 +1,15 @@
 package com.permobil.psds.wearos;
 
 import android.Manifest;
+import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.location.LocationManager;
 import android.os.Bundle;
 import android.support.wearable.activity.WearableActivity;
 import android.util.Log;
@@ -110,12 +113,16 @@ public class MainActivity extends WearableActivity {
         // check if user already has entered study ID
         String savedStudyId = sharedPref.getString(Constants.SAVED_STUDY_ID, "");
         Log.d(TAG, "Saved study id: " + savedStudyId);
-        if (!savedStudyId.equals("")) {
-            mStudyIdText.setText(String.format("Study ID: %s", savedStudyId)); // set the study id for text view to show user their current study ID
+        // prompt the user if their GPS is not enabled for data study
+        boolean isGpsEnabled = isGpsEnabled();
+        if (!isGpsEnabled) {
+            buildAlertMessageNoGps();
         }
+
 
         // we have a study id for the device so just start the service to collect data
         if (!savedStudyId.equals("")) {
+            mStudyIdText.setText(String.format("Study ID: %s", savedStudyId)); // set the study id for text view to show user their current study ID
             boolean canStartService = hasPermissionsForService();
             if (canStartService) {
                 startSensorService(savedStudyId);
@@ -204,12 +211,37 @@ public class MainActivity extends WearableActivity {
                         == PackageManager.PERMISSION_GRANTED;
     }
 
+    public boolean isGpsEnabled() {
+        final LocationManager manager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        boolean providerEnabled = manager != null && manager.isProviderEnabled(LocationManager.GPS_PROVIDER);
+        Log.d(TAG, "GPS is enabled:" + providerEnabled);
+        return providerEnabled;
+    }
+
+    private void buildAlertMessageNoGps() {
+        final AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setMessage("Your GPS seems to be disabled, do you want to enable it?")
+                .setCancelable(false)
+                .setPositiveButton("Yes", new DialogInterface.OnClickListener() {
+                    public void onClick(final DialogInterface dialog, final int id) {
+                        startActivity(new Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS));
+                    }
+                })
+                .setNegativeButton("No", new DialogInterface.OnClickListener() {
+                    public void onClick(final DialogInterface dialog, final int id) {
+                        dialog.cancel();
+                    }
+                });
+        final AlertDialog alert = builder.create();
+        alert.show();
+    }
+
     private void startSensorService(String studyId) {
         Intent i = new Intent(MainActivity.this, SensorService.class);
         i.setAction(Constants.ACTION_START_SERVICE);
 
         // startForegroundService(i);
-        startService(i);
+       startService(i);
         Log.d(TAG, "SensorService has been started successfully with study ID: " + studyId);
         isServiceRunning = true;
         mTextView.setVisibility(View.GONE);
