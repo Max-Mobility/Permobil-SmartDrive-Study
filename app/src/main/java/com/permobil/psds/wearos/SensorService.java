@@ -130,6 +130,10 @@ public class SensorService extends Service {
             stopMyService();
         }
 
+        // clear out any old info from last time we ran
+        isPushing = false;
+        _UnregisterNetwork();
+
         // Handle wake_lock so data collection can continue even when screen turns off
         // without wake_lock the service will stop bc the CPU gives up
         this._handleWakeLockSetup();
