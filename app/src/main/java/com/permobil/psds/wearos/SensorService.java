@@ -272,14 +272,18 @@ public class SensorService extends Service {
     public class NetworkCallback extends ConnectivityManager.NetworkCallback {
         @Override
         public void onAvailable(Network network) {
-            if (mConnectivityManager.bindProcessToNetwork(network)) {
-                int bandwidth =
-                        mConnectivityManager.getNetworkCapabilities(network).getLinkDownstreamBandwidthKbps();
-                Log.d(TAG, "Bandwidth for network: " + bandwidth);
-                // we can use this network
-                _SaveDataToKinvey();
-            } else {
-                // app doesn't have android.permission.INTERNET permission
+            if (network != null) {
+                if (mConnectivityManager.bindProcessToNetwork(network)) {
+                    NetworkCapabilities capabilities = mConnectivityManager.getNetworkCapabilities(network);
+                    if (capabilities != null) {
+                        int bandwidth = capabilities.getLinkDownstreamBandwidthKbps();
+                        Log.d(TAG, "Bandwidth for network: " + bandwidth);
+                        // we can use this network
+                        _SaveDataToKinvey();
+                    }
+                } else {
+                    // app doesn't have android.permission.INTERNET permission
+                }
             }
         }
     }
