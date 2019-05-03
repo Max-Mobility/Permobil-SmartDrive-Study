@@ -168,6 +168,7 @@ public class SensorService extends Service {
         } else {
             isPushing = true;
             Log.d(TAG, "Pushing to kinvey: " + numToSend);
+            sendMessageToActivity("Sending " + numToSend + " records to backend");
             psdsDataStore.push(new KinveyPushCallback() {
                 @Override
                 public void onSuccess(KinveyPushResponse kinveyPushResponse) {
@@ -192,7 +193,7 @@ public class SensorService extends Service {
                 public void onProgress(long current, long all) {
                     isPushing = true;
                     Log.d(TAG, "Kinvey push progress: " + current + " / " + all);
-                    sendMessageToActivity("Sending " + current + " / " + all + " to backend");
+                    sendMessageToActivity("Sent " + current + " / " + all + " records to backend");
                 }
             });
         }
