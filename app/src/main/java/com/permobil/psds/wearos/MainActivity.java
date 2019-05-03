@@ -208,7 +208,8 @@ public class MainActivity extends WearableActivity {
         Intent i = new Intent(MainActivity.this, SensorService.class);
         i.setAction(Constants.ACTION_START_SERVICE);
 
-        startService(i);
+        // startForegroundService(i);
+       startService(i);
         Log.d(TAG, "SensorService has been started successfully with study ID: " + studyId);
         isServiceRunning = true;
         mTextView.setVisibility(View.GONE);
