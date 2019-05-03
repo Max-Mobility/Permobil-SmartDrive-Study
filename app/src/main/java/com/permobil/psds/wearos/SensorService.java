@@ -25,7 +25,7 @@ import android.os.PowerManager.WakeLock;
 import android.util.Log;
 
 import androidx.core.app.ActivityCompat;
-import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationCompat.Builder;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.kinvey.android.Client;
@@ -37,6 +37,7 @@ import com.kinvey.java.core.KinveyClientCallback;
 import com.kinvey.java.store.StoreType;
 
 import java.util.ArrayList;
+import java.util.Objects;
 
 import io.sentry.Sentry;
 import io.sentry.event.UserBuilder;
@@ -45,20 +46,21 @@ public class SensorService extends Service {
 
     private static final String TAG = "PermobilSensorService";
     private static final int NOTIFICATION_ID = 543;
-    private static final int sensorDelay = 40000; // 40000 us or 40 ms delay
+    private static final int sensorDelay = 100000;
     private static final int maxReportingLatency = 1000000; // 1 seconds between sensor updates
 
+    private Builder notificationBuilder;
+    private NotificationManager notificationManager;
+    private Notification notification;
     private DataStore<PSDSData> psdsDataStore;
     private Handler mHandler;
     private WakeLock mWakeLock;
     private String userIdentifier;
     private String deviceUUID;
     private LocationManager mLocationManager;
-    private Runnable mSaveTask;
-    private Runnable mPushTask;
+    private Runnable mKinveyTask;
     private SensorEventListener mListener;
 
-    public boolean isPushing = false;
     public static boolean isServiceRunning = false;
     public static ArrayList<PSDSData.SensorData> sensorServiceDataList = new ArrayList<>();
 
@@ -74,9 +76,9 @@ public class SensorService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        Log.d(TAG, "SensorService onCreate...");
         startServiceWithNotification();
 
-        Log.d(TAG, "SensorService onCreate...");
         @SuppressLint("HardwareIds")
         String uuid = android.provider.Settings.Secure.getString(getContentResolver(),
                 android.provider.Settings.Secure.ANDROID_ID);
@@ -84,16 +86,11 @@ public class SensorService extends Service {
         this.mHandler = new Handler();
 
         Client mKinveyClient = ((App) getApplication()).getSharedClient();
-        Log.d(TAG, "Kinvey Client from App.java found and set in service.");
 
         // Get the Kinvey Data Collection for storing data
         this.psdsDataStore = DataStore.collection("PSDSData", PSDSData.class, StoreType.SYNC, mKinveyClient);
-        Log.d(TAG, "PSDSDataStore: " + this.psdsDataStore.getCollectionName());
-
-        // Get the LocationManager so we can send last known location with the record
-        // when saving to Kinvey
+        // Get the LocationManager so we can send last known location with the record when saving to Kinvey
         mLocationManager = (LocationManager) getApplicationContext().getSystemService(Context.LOCATION_SERVICE);
-        Log.d(TAG, "Location Manager: " + mLocationManager);
     }
 
     @Override
@@ -101,9 +98,14 @@ public class SensorService extends Service {
         // user identifier should always be in sharedPreferences
         userIdentifier = getSharedPreferences(getString(R.string.shared_preference_file_key), Context.MODE_PRIVATE)
                 .getString(Constants.SAVED_STUDY_ID, "");
-
         // Set the user in the current context.
         Sentry.getContext().setUser(new UserBuilder().setId(userIdentifier).build());
+
+        if (intent != null && Objects.requireNonNull(intent.getAction()).equals(Constants.ACTION_START_SERVICE)) {
+            startServiceWithNotification();
+        } else {
+            stopMyService();
+        }
 
         // Handle wake_lock so data collection can continue even when screen turns off
         // without wake_lock the service will stop bc the CPU gives up
@@ -112,73 +114,23 @@ public class SensorService extends Service {
         boolean didRegisterSensors = this._registerDeviceSensors(sensorDelay, maxReportingLatency);
         Log.d(TAG, "Did register Sensors: " + didRegisterSensors);
 
-        mSaveTask = new Runnable() {
+
+        mKinveyTask = new Runnable() {
             @Override
             public void run() {
-                _SaveDataToKinveyLocal();
-                mHandler.postDelayed(mSaveTask, 10 * 1000);
-            }
-        };
-        mPushTask = new Runnable() {
-            @Override
-            public void run() {
-                _PushDataToKinveyRemote();
-                mHandler.postDelayed(mPushTask, 60 * 1000);
+                _SaveDataToKinvey();
+                mHandler.postDelayed(mKinveyTask, 60 * 1000);
             }
         };
 
-        mSaveTask.run();
-        mPushTask.run();
-
-        if (intent != null && intent.getAction().equals(Constants.ACTION_START_SERVICE)) {
-            startServiceWithNotification();
-        } else {
-            stopMyService();
-        }
+        mKinveyTask.run();
 
         return START_STICKY; // START_STICKY is used for services that are explicitly started and stopped as
         // needed
     }
 
-    private void _PushDataToKinveyRemote() {
-        Log.d(TAG, "_PushDataToKinveyRemote()...");
-        if (isPushing) {
-            Log.d(TAG, "already pushing");
-            return;
-        }
-        if (psdsDataStore.syncCount() == 0) {
-            Log.d(TAG, "no data needs pushing - clearing the data store");
-            psdsDataStore.clear();
-            return;
-        }
-        isPushing = true;
-        // Push data to Kinvey backend.
-        psdsDataStore.push(new KinveyPushCallback() {
-            @Override
-            public void onSuccess(KinveyPushResponse kinveyPushResponse) {
-                isPushing = false;
-                Log.d(TAG, "Data pushed to Kinvey successfully. Check Kinvey console. Success Count = "
-                        + kinveyPushResponse.getSuccessCount());
-                sendMessageToActivity("Data service syncing data to backend successfully.");
-            }
-
-            @Override
-            public void onFailure(Throwable throwable) {
-                isPushing = false;
-                Log.e(TAG, "Kinvey push failure message" + ": " + throwable.getMessage());
-                Log.e(TAG, "Kinvey push failure cause: " + throwable.getCause());
-                sendMessageToActivity(throwable.getMessage());
-            }
-
-            @Override
-            public void onProgress(long current, long all) {
-                Log.d(TAG, "Kinvey push progress: " + current + " / " + all);
-            }
-        });
-    }
-
-    private void _SaveDataToKinveyLocal() {
-        Log.d(TAG, "_SaveDataToKinveyLocal()...");
+    private void _SaveDataToKinvey() {
+        Log.d(TAG, "_SaveDataToKinvey()...");
         // adding an empty check to avoid pushing the initial service starting records with no sensor_data since the intervals haven't clocked at that time
         if (sensorServiceDataList.isEmpty()) {
             Log.d(TAG, "Sensor data list is empty, so will not save/push this record.");
@@ -198,8 +150,7 @@ public class SensorService extends Service {
         } else {
             Location loc = mLocationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
             if (loc != null) {
-                PSDSLocation psdsloc = new PSDSLocation(loc.getLatitude(), loc.getLongitude(), loc.getTime());
-                data.location = psdsloc;
+                data.location = new PSDSLocation(loc.getLatitude(), loc.getLongitude(), loc.getTime());
             } else {
                 data.location = null;
             }
@@ -210,17 +161,42 @@ public class SensorService extends Service {
             psdsDataStore.save(data, new KinveyClientCallback<PSDSData>() {
                 @Override
                 public void onSuccess(PSDSData result) {
-                    Log.d(TAG, "Entity saved to local Kinvey client");
+                    // Push data to Kinvey backend.
+                    psdsDataStore.push(new KinveyPushCallback() {
+                        @Override
+                        public void onSuccess(KinveyPushResponse kinveyPushResponse) {
+                            Log.d(TAG, "Data pushed to Kinvey successfully. Success Count = "
+                                    + kinveyPushResponse.getSuccessCount());
+                            sendMessageToActivity("Data service syncing data to backend successfully.");
+                        }
+
+                        @Override
+                        public void onFailure(Throwable throwable) {
+                            Log.e(TAG, "Kinvey push failure message" + ": " + throwable.getMessage());
+                            Log.e(TAG, "Kinvey push failure cause: " + throwable.getCause());
+                            sendMessageToActivity(throwable.getMessage());
+                            Sentry.capture(throwable);
+                        }
+
+                        @Override
+                        public void onProgress(long current, long all) {
+                            Log.d(TAG, "Kinvey push progress: " + current + " / " + all);
+                        }
+                    });
+
                 }
 
                 @Override
-                public void onFailure(Throwable error) {
-                    Log.e(TAG, "Failed to save to Kinvey: " + error.getMessage());
-                    Sentry.capture(error);
+                public void onFailure(Throwable throwable) {
+                    Log.e(TAG, "Kinvey SAVE() Failure: " + throwable.getMessage());
+                    sendMessageToActivity("Error saving data: " + throwable.getMessage());
+                    Sentry.capture(throwable);
                 }
             });
+
         } catch (KinveyException ke) {
             Log.e(TAG, "Error saving kinvey record for sensor data. " + ke.getReason());
+            sendMessageToActivity("Error trying to save data to backend: " + ke.getExplanation());
             Sentry.capture(ke);
         }
     }
@@ -235,8 +211,7 @@ public class SensorService extends Service {
         }
 
         // remove handler tasks
-        mHandler.removeCallbacks(mSaveTask);
-        mHandler.removeCallbacks(mPushTask);
+        mHandler.removeCallbacks(mKinveyTask);
     }
 
     public class SensorListener implements SensorEventListener {
@@ -245,7 +220,7 @@ public class SensorService extends Service {
             if (mListener != null) {
                 ArrayList<Float> dataList = new ArrayList<>();
                 for (float f : event.values) {
-                    dataList.add(Float.valueOf(f));
+                    dataList.add(f);
                 }
                 // create new SensorServiceData
                 PSDSData.SensorData data = new PSDSData.SensorData(event.sensor.getType(), event.timestamp, dataList);
@@ -333,7 +308,7 @@ public class SensorService extends Service {
         Bitmap icon = BitmapFactory.decodeResource(getResources(), R.mipmap.ic_launcher_round);
 
         // create the notification channel
-        NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         String channelId = Constants.NOTIFICATION_CHANNEL;
         int importance = NotificationManager.IMPORTANCE_HIGH;
         NotificationChannel notificationChannel = new NotificationChannel(channelId, Constants.NOTIFICATION_CHANNEL, importance);
@@ -341,7 +316,8 @@ public class SensorService extends Service {
         notificationChannel.enableVibration(false);
         notificationManager.createNotificationChannel(notificationChannel);
 
-        Notification notification = new NotificationCompat.Builder(this, Constants.NOTIFICATION_CHANNEL)
+        // create the notification builder
+        notificationBuilder = new Builder(this, Constants.NOTIFICATION_CHANNEL)
                 .setContentTitle(getResources().getString(R.string.app_name))
                 .setTicker(getResources().getString(R.string.app_name))
                 .setContentText("Permobil Sensor Data Study is collecting data.")
@@ -349,9 +325,11 @@ public class SensorService extends Service {
                 .setLargeIcon(Bitmap.createScaledBitmap(icon, 128, 128, false))
                 .setContentIntent(contentPendingIntent)
                 .setOngoing(true)
-                .setChannelId(channelId)
-                .build();
-        notification.flags = notification.flags | Notification.FLAG_NO_CLEAR; // NO_CLEAR makes the notification stay when the user performs a "delete all" command
+                .setChannelId(channelId);
+
+        // create the notification
+        notification = notificationBuilder.build();
+        notification.flags = notification.flags | Notification.FLAG_ONGOING_EVENT | Notification.FLAG_NO_CLEAR; // NO_CLEAR makes the notification stay when the user performs a "delete all" command
         startForeground(NOTIFICATION_ID, notification);
     }
 
