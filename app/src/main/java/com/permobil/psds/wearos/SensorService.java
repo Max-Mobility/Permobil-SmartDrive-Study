@@ -171,7 +171,7 @@ public class SensorService extends Service {
                     isPushing = false;
                     Log.d(TAG, "Data pushed to Kinvey successfully. Success Count = "
                             + kinveyPushResponse.getSuccessCount());
-                    sendMessageToActivity("Data service syncing data to backend successfully.");
+                    sendMessageToActivity("Data service synced data to backend successfully.");
                     _UnregisterNetwork();
                 }
 
@@ -189,6 +189,7 @@ public class SensorService extends Service {
                 public void onProgress(long current, long all) {
                     isPushing = true;
                     Log.d(TAG, "Kinvey push progress: " + current + " / " + all);
+                    sendMessageToActivity("Sending " + current + " / " + all + " to backend");
                 }
             });
         }
