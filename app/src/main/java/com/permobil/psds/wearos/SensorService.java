@@ -25,6 +25,7 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
 import android.os.Handler;
+import android.os.Message;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
@@ -52,14 +53,16 @@ public class SensorService extends Service {
 
     private static final String TAG = "PermobilSensorService";
     private static final int NOTIFICATION_ID = 543;
-    private static final int sensorDelay = 40000; // 40000 us or 40 ms delay
-    private static final int maxReportingLatency = 1000000; // 1 second between sensor updates
+    private static final int MESSAGE_CONNECTIVITY_TIMEOUT = 1;
+    private static final long NETWORK_CONNECTIVITY_TIMEOUT_MS = 60000;
+    private static final int sensorDelay = android.hardware.SensorManager.SENSOR_DELAY_UI;
+    private static final int maxReportingLatency = 1000000; // 10 seconds between sensor updates
 
     private Builder notificationBuilder;
     private NotificationManager notificationManager;
     private Notification notification;
     private DataStore<PSDSData> psdsDataStore;
-    private Handler mHandler;
+    private MyHandler mHandler;
     private WakeLock mWakeLock;
     private String userIdentifier;
     private String deviceUUID;
@@ -72,15 +75,42 @@ public class SensorService extends Service {
     private NetworkCallback mNetworkCallback;
 
     private Sensor mSignificantMotion;
+    private Sensor mLinearAcceleration;
+    private Sensor mGravity;
+    private Sensor mMagneticField;
+    private Sensor mRotationVector;
+    private Sensor mGameRotationVector;
+    private Sensor mGyroscope;
+    private Sensor mProximity;
+    private Sensor mOffBodyDetect;
+    private Sensor mStationaryDetect;
+    private Sensor mMotionDetect;
 
     // activity detection
     public boolean personIsActive = false;
     public boolean watchBeingWorn = false;
 
     public boolean isPushing = false;
+    public boolean isRegistered = false;
+    public long numRecordsPushed = 0;
+    public long numRecordsSaved = 0;
 
     public boolean isServiceRunning = false;
     public ArrayList<PSDSData.SensorData> sensorServiceDataList = new ArrayList<>();
+
+    // This needs to be static to avoid potentially leaking the parent class
+    private class MyHandler extends Handler {
+        @Override
+        public void handleMessage(Message msg) {
+            super.handleMessage(msg);
+            switch (msg.what) {
+                case MESSAGE_CONNECTIVITY_TIMEOUT:
+                    Log.d(TAG, "NetworkCallback Connectivity Timeout!");
+                    _UnregisterNetwork();
+                    break;
+            }
+        }
+    }
 
     public SensorService() {
     }
@@ -101,7 +131,7 @@ public class SensorService extends Service {
         String uuid = android.provider.Settings.Secure.getString(getContentResolver(),
                 android.provider.Settings.Secure.ANDROID_ID);
         this.deviceUUID = uuid;
-        this.mHandler = new Handler();
+        this.mHandler = new MyHandler();
 
         Client mKinveyClient = ((App) getApplication()).getSharedClient();
 
@@ -263,35 +293,53 @@ public class SensorService extends Service {
 
     @Override
     public void onDestroy() {
-        isServiceRunning = false;
         super.onDestroy();
+
         if (this.mWakeLock != null) {
             Log.d(TAG, "Releasing wakelock for SensorService.");
             this.mWakeLock.release();
         }
 
+        // remove network monitor
+        _UnregisterNetwork();
+
+        // remove sensor listeners
+        _unregisterDeviceSensors();
+
         // remove handler tasks
         mHandler.removeCallbacks(mKinveyTask);
+
+        isServiceRunning = false;
     }
 
     public void _RequestNetworkAndSend() {
-        Log.d(TAG, "Binding network");
-        NetworkRequest request = new NetworkRequest.Builder()
-                .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-                .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
-                .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
-                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                .build();
+        if (!isPushing) {
+            Log.d(TAG, "Binding network");
+            NetworkRequest request = new NetworkRequest.Builder()
+                    .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                    .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
+                    .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+                    .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    .build();
 
-        mConnectivityManager.requestNetwork(request, mNetworkCallback);
+            mConnectivityManager.requestNetwork(request, mNetworkCallback);
+            isRegistered = true;
+
+            mHandler.sendMessageDelayed(
+                    mHandler.obtainMessage(MESSAGE_CONNECTIVITY_TIMEOUT),
+                    NETWORK_CONNECTIVITY_TIMEOUT_MS);
+        }
     }
 
     public void _UnregisterNetwork() {
-        isPushing = false;
         Log.d(TAG, "Unbinding network");
-        // unregister network
+        isPushing = false;
         mConnectivityManager.bindProcessToNetwork(null);
-        mConnectivityManager.unregisterNetworkCallback(mNetworkCallback);
+        if (isRegistered) {
+            // unregister network
+            mConnectivityManager.unregisterNetworkCallback(mNetworkCallback);
+        }
+        isRegistered = false;
     }
 
     public class NetworkCallback extends ConnectivityManager.NetworkCallback {
@@ -307,9 +355,15 @@ public class SensorService extends Service {
                         _SaveDataToKinvey();
                     }
                 } else {
+                    Log.w(TAG, "Couldn't bind process to network!");
                     // app doesn't have android.permission.INTERNET permission
                 }
             }
+        }
+
+        @Override
+        public void onLost(Network network) {
+            Log.d(TAG, "Lost network!");
         }
     }
 
@@ -320,7 +374,9 @@ public class SensorService extends Service {
                 //Log.d(TAG, "Significant motion detected!");
                 //sendMessageToActivity("Significant Motion Detected!");
                 personIsActive = true;
-                mSensorManager.requestTriggerSensor(this, mSignificantMotion);
+                if (isServiceRunning) {
+                    mSensorManager.requestTriggerSensor(this, mSignificantMotion);
+                }
             }
         }
     }
@@ -363,9 +419,40 @@ public class SensorService extends Service {
 
         public boolean hasBeenActive() {
             //Log.d(TAG, "PersonIsActive: " + personIsActive + "; watchBeingWorn: " + watchBeingWorn);
-            return personIsActive && watchBeingWorn;
+            return true;//watchBeingWorn;
         }
 
+    }
+
+    private void _unregisterDeviceSensors() {
+        mSensorManager = (SensorManager) getApplicationContext().getSystemService(SENSOR_SERVICE);
+        // make sure we have the sensor manager for the device
+        if (mSensorManager != null && mListener != null && mTriggerListener != null) {
+            if (mLinearAcceleration != null)
+                mSensorManager.unregisterListener(mListener, mLinearAcceleration);
+            if (mGravity != null)
+                mSensorManager.unregisterListener(mListener, mGravity);
+            if (mMagneticField != null)
+                mSensorManager.unregisterListener(mListener, mMagneticField);
+            if (mRotationVector != null)
+                mSensorManager.unregisterListener(mListener, mRotationVector);
+            if (mGameRotationVector != null)
+                mSensorManager.unregisterListener(mListener, mGameRotationVector);
+            if (mGyroscope != null)
+                mSensorManager.unregisterListener(mListener, mGyroscope);
+            if (mProximity != null)
+                mSensorManager.unregisterListener(mListener, mProximity);
+            if (mOffBodyDetect != null)
+                mSensorManager.unregisterListener(mListener, mOffBodyDetect);
+            if (mStationaryDetect != null)
+                mSensorManager.unregisterListener(mListener, mStationaryDetect);
+            if (mSignificantMotion != null)
+                mSensorManager.cancelTriggerSensor(mTriggerListener, mSignificantMotion);
+            if (mMotionDetect != null)
+                mSensorManager.unregisterListener(mListener, mMotionDetect);
+        } else {
+            Log.e(TAG, "Sensor Manager was not found, so sensor service is unable to unregister sensor listener events.");
+        }
     }
 
     private boolean _registerDeviceSensors(int delay, int reportingLatency) {
@@ -377,56 +464,56 @@ public class SensorService extends Service {
             mTriggerListener = new TriggerSensorListener();
 
             // register all the sensors we want to track data for
-            Sensor mLinearAcceleration = mSensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION);
+            mLinearAcceleration = mSensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION);
             if (mLinearAcceleration != null)
                 mSensorManager.registerListener(mListener, mLinearAcceleration, delay, reportingLatency);
 
-            Sensor mGravity = mSensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY);
+            mGravity = mSensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY);
             if (mGravity != null)
                 mSensorManager.registerListener(mListener, mGravity, delay, reportingLatency);
 
-            Sensor mMagneticField = mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
+            mMagneticField = mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
             if (mMagneticField != null)
                 mSensorManager.registerListener(mListener, mMagneticField, delay, reportingLatency);
 
-            Sensor mRotationVector = mSensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
+            mRotationVector = mSensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
             if (mRotationVector != null)
                 mSensorManager.registerListener(mListener, mRotationVector, delay, reportingLatency);
 
-            Sensor mGameRotationVector = mSensorManager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR);
+            mGameRotationVector = mSensorManager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR);
             if (mGameRotationVector != null)
                 mSensorManager.registerListener(mListener, mGameRotationVector, delay, reportingLatency);
 
-            Sensor mGyroscope = mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
+            mGyroscope = mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
             if (mGyroscope != null)
                 mSensorManager.registerListener(mListener, mGyroscope, delay, reportingLatency);
 
-            Sensor mProximity = mSensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
+            mProximity = mSensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
             if (mProximity != null) {
                 mSensorManager.registerListener(mListener, mProximity, delay, reportingLatency);
                 //Log.d(TAG, "Have TYPE_PROXIMITY");
             }
 
-            Sensor mOffBodyDetect = mSensorManager.getDefaultSensor(Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT);
+            mOffBodyDetect = mSensorManager.getDefaultSensor(Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT);
             if (mOffBodyDetect != null)
                 mSensorManager.registerListener(mListener, mOffBodyDetect, delay, reportingLatency);
 
             //Log.d(TAG, "Checking TYPE_STATIONARY_DETECT");
-            Sensor mStationaryDetect = mSensorManager.getDefaultSensor(Sensor.TYPE_STATIONARY_DETECT);
+            mStationaryDetect = mSensorManager.getDefaultSensor(Sensor.TYPE_STATIONARY_DETECT);
             if (mStationaryDetect != null) {
                 mSensorManager.registerListener(mListener, mStationaryDetect, delay, reportingLatency);
-                Log.d(TAG, "Have TYPE_STATIONARY_DETECT");
+                //Log.d(TAG, "Have TYPE_STATIONARY_DETECT");
             }
 
             //Log.d(TAG, "Checking TYPE_SIGNIFICANT_MOTION");
             mSignificantMotion = mSensorManager.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION);
             if (mSignificantMotion != null) {
                 mSensorManager.requestTriggerSensor(mTriggerListener, mSignificantMotion);
-                Log.d(TAG, "Have TYPE_SIGNIFICANT_MOTION");
+                //Log.d(TAG, "Have TYPE_SIGNIFICANT_MOTION");
             }
 
             //Log.d(TAG, "Checking TYPE_MOTION_DETECT");
-            Sensor mMotionDetect = mSensorManager.getDefaultSensor(Sensor.TYPE_MOTION_DETECT);
+            mMotionDetect = mSensorManager.getDefaultSensor(Sensor.TYPE_MOTION_DETECT);
             if (mMotionDetect != null) {
                 mSensorManager.registerListener(mListener, mMotionDetect, delay, reportingLatency);
                 //Log.d(TAG, "Have TYPE_MOTION_DETECT");
