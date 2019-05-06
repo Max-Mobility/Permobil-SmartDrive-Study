@@ -36,6 +36,7 @@ import androidx.core.app.NotificationCompat.Builder;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.kinvey.android.Client;
+import com.kinvey.android.callback.KinveyPurgeCallback;
 import com.kinvey.android.store.DataStore;
 import com.kinvey.android.sync.KinveyPushCallback;
 import com.kinvey.android.sync.KinveyPushResponse;
@@ -140,6 +141,10 @@ public class SensorService extends Service {
 
         // Get the Kinvey Data Collection for storing data
         this.psdsDataStore = DataStore.collection("PSDSData", PSDSData.class, StoreType.SYNC, mKinveyClient);
+
+        // clear the datastore (from previous app runs)
+        _PurgeLocalData();
+
         // Get the LocationManager so we can send last known location with the record when saving to Kinvey
         mLocationManager = (LocationManager) getApplicationContext().getSystemService(Context.LOCATION_SERVICE);
 
@@ -198,6 +203,39 @@ public class SensorService extends Service {
         // needed
     }
 
+    private void _PurgeLocalData() {
+        Log.d(TAG, "_PurgeLocalData()");
+        isPushing = false;
+        isSaving = true;
+        try {
+            long numToSend = psdsDataStore.syncCount();
+            Log.d(TAG, "Purging " + numToSend + " records from the DB");
+            psdsDataStore.clear(); // we have nothing unsent, clear the storage
+            psdsDataStore.purge(new KinveyPurgeCallback() {
+                @Override
+                public void onSuccess(Void aVoid) {
+                    isSaving = false;
+                    Log.d(TAG, "purged datastore");
+                }
+
+                @Override
+                public void onFailure(Throwable throwable) {
+                    isSaving = false;
+                    Log.e(TAG, "Kinvey purge failure message" + ": " + throwable.getMessage());
+                    Log.e(TAG, "Kinvey purge failure cause: " + throwable.getCause());
+                    sendMessageToActivity(throwable.getMessage());
+                    Sentry.capture(throwable);
+
+                }
+            });
+        } catch (KinveyException ke) {
+            isSaving = false;
+            Log.e(TAG, "Error purging kinvey database" + ke.getReason());
+            sendMessageToActivity("Error trying to purge database: " + ke.getExplanation());
+            Sentry.capture(ke);
+        }
+    }
+
     private void _PushDataToKinvey() {
         Log.d(TAG, "_PushDataToKinvey()...");
         if (isPushing) {
@@ -206,7 +244,7 @@ public class SensorService extends Service {
         long numToSend = psdsDataStore.syncCount();
         if (numToSend == 0) {
             Log.d(TAG, "No unsent data, clearing the storage.");
-            psdsDataStore.clear(); // we have nothing unsent, clear the storage
+            _PurgeLocalData();
             _UnregisterNetwork();
         } else {
             isPushing = true;
@@ -252,7 +290,7 @@ public class SensorService extends Service {
 
     private void _SaveDataToKinvey() {
         Log.d(TAG, "_SaveDataToKinvey()...");
-        if (isSaving) {
+        if (isSaving || isPushing) {
             return;
         }
         // adding an empty check to avoid pushing the initial service starting records with no sensor_data since the intervals haven't clocked at that time
@@ -313,6 +351,7 @@ public class SensorService extends Service {
 
     @Override
     public void onDestroy() {
+        Log.d(TAG, "onDestroy()...");
         super.onDestroy();
 
         if (this.mWakeLock != null) {
@@ -446,7 +485,7 @@ public class SensorService extends Service {
 
         public boolean hasBeenActive() {
             //Log.d(TAG, "PersonIsActive: " + personIsActive + "; watchBeingWorn: " + watchBeingWorn);
-            return true;//watchBeingWorn;
+            return watchBeingWorn;
         }
 
     }
