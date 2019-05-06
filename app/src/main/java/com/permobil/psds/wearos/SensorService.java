@@ -211,6 +211,7 @@ public class SensorService extends Service {
         if (numToSend == 0) {
             Log.d(TAG, "No unsent data, clearing the storage.");
             _PurgeLocalData();
+            unregisterNetwork();
         } else {
             Log.d(TAG, "Pushing to kinvey: " + numToSend);
             sendMessageToActivity("Sending " + numToSend + " records to backend");
@@ -220,10 +221,12 @@ public class SensorService extends Service {
                 Log.e(TAG, "Error pushing kinvey record for sensor data. " + ke.getReason());
                 sendMessageToActivity("Error trying to push data to backend: " + ke.getExplanation());
                 Sentry.capture(ke);
+                unregisterNetwork();
             } catch (Exception e) {
                 Log.e(TAG, "Exception:" + e.getMessage());
                 sendMessageToActivity("Error pushing: " + e.getMessage());
                 Sentry.capture(e);
+                unregisterNetwork();
             }
         }
     }
