@@ -57,6 +57,7 @@ public class SensorService extends Service {
     private static final long NETWORK_CONNECTIVITY_TIMEOUT_MS = 60000;
     private static final int sensorDelay = android.hardware.SensorManager.SENSOR_DELAY_UI;
     private static final int maxReportingLatency = 1000000; // 10 seconds between sensor updates
+    private static final int KINVEY_TASK_PERIOD_MS = 1 * 60 * 1000;
 
     private Builder notificationBuilder;
     private NotificationManager notificationManager;
@@ -91,6 +92,7 @@ public class SensorService extends Service {
     public boolean watchBeingWorn = false;
 
     public boolean isPushing = false;
+    public boolean isSaving = false;
     public boolean isRegistered = false;
     public long numRecordsPushed = 0;
     public long numRecordsSaved = 0;
@@ -107,6 +109,7 @@ public class SensorService extends Service {
                 case MESSAGE_CONNECTIVITY_TIMEOUT:
                     Log.d(TAG, "NetworkCallback Connectivity Timeout!");
                     _UnregisterNetwork();
+                    getApplicationContext().startActivity(new Intent("com.google.android.clockwork.settings.connectivity.wifi.ADD_NETWORK_SETTINGS"));
                     break;
             }
         }
@@ -139,6 +142,8 @@ public class SensorService extends Service {
         this.psdsDataStore = DataStore.collection("PSDSData", PSDSData.class, StoreType.SYNC, mKinveyClient);
         // Get the LocationManager so we can send last known location with the record when saving to Kinvey
         mLocationManager = (LocationManager) getApplicationContext().getSystemService(Context.LOCATION_SERVICE);
+
+        Log.d(TAG, "providers: " + mLocationManager.getProviders(false));
 
         // Get the ConnectivityManager so we can turn on wifi before saving
         mConnectivityManager = (ConnectivityManager) this.getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -179,7 +184,7 @@ public class SensorService extends Service {
                     @Override
                     public void run() {
                         _RequestNetworkAndSend();
-                        mHandler.postDelayed(mKinveyTask, 10 * 60 * 1000); // save every 10 minutes
+                        mHandler.postDelayed(mKinveyTask, KINVEY_TASK_PERIOD_MS); // save every 10 minutes
                     }
                 };
 
@@ -207,43 +212,55 @@ public class SensorService extends Service {
             isPushing = true;
             Log.d(TAG, "Pushing to kinvey: " + numToSend);
             sendMessageToActivity("Sending " + numToSend + " records to backend");
-            psdsDataStore.push(new KinveyPushCallback() {
-                @Override
-                public void onSuccess(KinveyPushResponse kinveyPushResponse) {
-                    isPushing = false;
-                    Log.d(TAG, "Data pushed to Kinvey successfully. Success Count = "
-                            + kinveyPushResponse.getSuccessCount());
-                    sendMessageToActivity("Data service synced data to backend successfully.");
-                    _UnregisterNetwork();
-                }
+            try {
+                psdsDataStore.push(new KinveyPushCallback() {
+                    @Override
+                    public void onSuccess(KinveyPushResponse kinveyPushResponse) {
+                        isPushing = false;
+                        int successCount = kinveyPushResponse.getSuccessCount();
+                        Log.d(TAG, "Data pushed to Kinvey successfully. Success Count = " + successCount);
+                        sendMessageToActivity("Data service synced " + successCount + " records to backend successfully.");
+                        _UnregisterNetwork();
+                    }
 
-                @Override
-                public void onFailure(Throwable throwable) {
-                    isPushing = false;
-                    Log.e(TAG, "Kinvey push failure message" + ": " + throwable.getMessage());
-                    Log.e(TAG, "Kinvey push failure cause: " + throwable.getCause());
-                    sendMessageToActivity(throwable.getMessage());
-                    Sentry.capture(throwable);
-                    _UnregisterNetwork();
-                }
+                    @Override
+                    public void onFailure(Throwable throwable) {
+                        isPushing = false;
+                        Log.e(TAG, "Kinvey push failure message" + ": " + throwable.getMessage());
+                        Log.e(TAG, "Kinvey push failure cause: " + throwable.getCause());
+                        sendMessageToActivity(throwable.getMessage());
+                        Sentry.capture(throwable);
+                        _UnregisterNetwork();
+                    }
 
-                @Override
-                public void onProgress(long current, long all) {
-                    isPushing = true;
-                    Log.d(TAG, "Kinvey push progress: " + current + " / " + all);
-                    sendMessageToActivity("Sent " + current + " / " + all + " records to backend");
-                }
-            });
+                    @Override
+                    public void onProgress(long current, long all) {
+                        isPushing = true;
+                        Log.d(TAG, "Kinvey push progress: " + current + " / " + all);
+                        sendMessageToActivity("Sent " + current + " / " + all + " records to backend");
+                    }
+                });
+            } catch (KinveyException ke) {
+                isPushing = false;
+                Log.e(TAG, "Error pushing kinvey record for sensor data. " + ke.getReason());
+                sendMessageToActivity("Error trying to push data to backend: " + ke.getExplanation());
+                Sentry.capture(ke);
+                _UnregisterNetwork();
+            }
         }
     }
 
     private void _SaveDataToKinvey() {
         Log.d(TAG, "_SaveDataToKinvey()...");
+        if (isSaving) {
+            return;
+        }
         // adding an empty check to avoid pushing the initial service starting records with no sensor_data since the intervals haven't clocked at that time
         if (sensorServiceDataList.isEmpty()) {
             Log.d(TAG, "Sensor data list is empty, so will not save/push this record.");
             _PushDataToKinvey();
         } else {
+            isSaving = true;
             PSDSData data = new PSDSData();
             data.user_identifier = this.userIdentifier;
             data.device_uuid = this.deviceUUID;
@@ -269,12 +286,14 @@ public class SensorService extends Service {
                 psdsDataStore.save(data, new KinveyClientCallback<PSDSData>() {
                     @Override
                     public void onSuccess(PSDSData result) {
+                        isSaving = false;
                         // Push data to Kinvey backend.
                         _PushDataToKinvey();
                     }
 
                     @Override
                     public void onFailure(Throwable throwable) {
+                        isSaving = false;
                         Log.e(TAG, "Kinvey SAVE() Failure: " + throwable.getMessage());
                         sendMessageToActivity("Error saving data: " + throwable.getMessage());
                         Sentry.capture(throwable);
@@ -283,6 +302,7 @@ public class SensorService extends Service {
                 });
 
             } catch (KinveyException ke) {
+                isSaving = false;
                 Log.e(TAG, "Error saving kinvey record for sensor data. " + ke.getReason());
                 sendMessageToActivity("Error trying to save data to backend: " + ke.getExplanation());
                 Sentry.capture(ke);
@@ -360,6 +380,12 @@ public class SensorService extends Service {
                     // app doesn't have android.permission.INTERNET permission
                 }
             }
+        }
+
+        @Override
+        public void onCapabilitiesChanged(Network network, NetworkCapabilities networkCapabilities) {
+            int bandwidth = networkCapabilities.getLinkDownstreamBandwidthKbps();
+            Log.d(TAG, "Network Capabilities changed to " + bandwidth + " Kbps");
         }
 
         @Override
