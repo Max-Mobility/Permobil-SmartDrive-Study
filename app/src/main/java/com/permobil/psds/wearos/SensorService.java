@@ -345,6 +345,7 @@ public class SensorService extends Service {
     public class NetworkCallback extends ConnectivityManager.NetworkCallback {
         @Override
         public void onAvailable(Network network) {
+            mHandler.removeMessages(MESSAGE_CONNECTIVITY_TIMEOUT);
             if (network != null) {
                 if (mConnectivityManager.bindProcessToNetwork(network)) {
                     NetworkCapabilities capabilities = mConnectivityManager.getNetworkCapabilities(network);
