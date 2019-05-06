@@ -55,7 +55,7 @@ public class SensorService extends Service {
     private static final String TAG = "PermobilSensorService";
     private static final int NOTIFICATION_ID = 543;
     private static final int MESSAGE_CONNECTIVITY_TIMEOUT = 1;
-    private static final long NETWORK_CONNECTIVITY_TIMEOUT_MS = 60000;
+    private static final int NETWORK_CONNECTIVITY_TIMEOUT_MS = 60000;
     private static final int sensorDelay = android.hardware.SensorManager.SENSOR_DELAY_UI;
     private static final int maxReportingLatency = 1000000; // 10 seconds between sensor updates
     private static final int KINVEY_TASK_PERIOD_MS = 1 * 60 * 1000;
@@ -86,6 +86,8 @@ public class SensorService extends Service {
     private Sensor mOffBodyDetect;
     private Sensor mStationaryDetect;
     private Sensor mMotionDetect;
+
+    private NetworkCallback mNetworkCallback;
 
     // activity detection
     public boolean personIsActive = false;
@@ -135,6 +137,9 @@ public class SensorService extends Service {
 
         // Get the LocationManager so we can send last known location with the record when saving to Kinvey
         mLocationManager = (LocationManager) getApplicationContext().getSystemService(Context.LOCATION_SERVICE);
+
+        mConnectivityManager = (ConnectivityManager) getApplicationContext().getSystemService(CONNECTIVITY_SERVICE);
+        mNetworkCallback = new NetworkCallback();
 
         Log.d(TAG, "providers: " + mLocationManager.getProviders(false));
 
@@ -235,7 +240,6 @@ public class SensorService extends Service {
             Log.e(TAG, "Kinvey purge failure cause: " + throwable.getCause());
             sendMessageToActivity(throwable.getMessage());
             Sentry.capture(throwable);
-
         }
 
     }
@@ -246,6 +250,7 @@ public class SensorService extends Service {
             int successCount = kinveyPushResponse.getSuccessCount();
             Log.d(TAG, "Data pushed to Kinvey successfully. Success Count = " + successCount);
             sendMessageToActivity("Data service synced " + successCount + " records to backend successfully.");
+            unregisterNetwork();
         }
 
         @Override
@@ -254,6 +259,7 @@ public class SensorService extends Service {
             Log.e(TAG, "Kinvey push failure cause: " + throwable.getCause());
             sendMessageToActivity(throwable.getMessage());
             Sentry.capture(throwable);
+            unregisterNetwork();
         }
 
         @Override
@@ -275,6 +281,7 @@ public class SensorService extends Service {
             Log.e(TAG, "Kinvey SAVE() Failure: " + throwable.getMessage());
             sendMessageToActivity("Error saving data: " + throwable.getMessage());
             Sentry.capture(throwable);
+            unregisterNetwork();
         }
 
     }
@@ -320,10 +327,12 @@ public class SensorService extends Service {
                 Log.e(TAG, "Error saving kinvey record for sensor data. " + ke.getReason());
                 sendMessageToActivity("Error trying to save data to backend: " + ke.getExplanation());
                 Sentry.capture(ke);
+                unregisterNetwork();
             } catch (Exception e) {
                 Log.e(TAG, "Exception:" + e.getMessage());
                 sendMessageToActivity("Error saving: " + e.getMessage());
                 Sentry.capture(e);
+                unregisterNetwork();
             }
         }
     }
@@ -338,6 +347,9 @@ public class SensorService extends Service {
             this.mWakeLock.release();
         }
 
+        // unregister network
+        unregisterNetwork();
+
         // remove sensor listeners
         _unregisterDeviceSensors();
 
@@ -347,56 +359,77 @@ public class SensorService extends Service {
         isServiceRunning = false;
     }
 
-    private void alwaysPreferNetworksWith(int[] capabilities, int[] transportTypes) {
+    private class NetworkCallback extends ConnectivityManager.NetworkCallback {
+        public boolean isRegistered = false;
 
+        @Override
+        public void onAvailable(Network network) {
+            try {
+                if (mConnectivityManager.bindProcessToNetwork(network)) {
+                    NetworkCapabilities capabilities = mConnectivityManager.getNetworkCapabilities(network);
+                    if (capabilities != null) {
+                        int bandwidth = capabilities.getLinkDownstreamBandwidthKbps();
+                        Log.d(TAG, "Bandwidth for network: " + bandwidth);
+                        // we can use this network
+                        _SaveDataToKinvey();
+                    } else {
+                        Log.d(TAG, "No capabilities for network!");
+                        unregisterNetwork();
+                    }
+                } else {
+                    Log.w(TAG, "Couldn't bind process to network!");
+                    // app doesn't have android.permission.INTERNET permission
+                    unregisterNetwork();
+                }
+            } catch (IllegalStateException e) {
+                Log.e(TAG, "ConnectivityManager.NetworkCallback.onAvailable: ", e);
+                unregisterNetwork();
+            }
+        }
+
+        @Override
+        public void onCapabilitiesChanged(Network network, NetworkCapabilities networkCapabilities) {
+            int bandwidth = networkCapabilities.getLinkDownstreamBandwidthKbps();
+            Log.d(TAG, "Network Capabilities changed to " + bandwidth + " Kbps");
+        }
+
+        @Override
+        public void onLost(Network network) {
+            Log.d(TAG, "Lost network!");
+        }
+
+        @Override
+        public void onUnavailable() {
+            isRegistered = false;
+        }
+    }
+
+    private void unregisterNetwork() {
+        Log.d(TAG, "unregisterNetwork()...");
+        mConnectivityManager.bindProcessToNetwork(null);
+        if (this.mNetworkCallback.isRegistered) {
+            mConnectivityManager.unregisterNetworkCallback(this.mNetworkCallback);
+        }
+        this.mNetworkCallback.isRegistered = false;
+    }
+
+    private void requestNetwork(int[] capabilities, int[] transportTypes) {
+        Log.d(TAG, "requestNetwork()...");
+        if (this.mNetworkCallback.isRegistered) {
+            Log.d(TAG, "already registered");
+            return;
+        }
         NetworkRequest.Builder request = new NetworkRequest.Builder();
-
         // add capabilities
         for (int cap: capabilities) {
             request.addCapability(cap);
         }
-
         // add transport types
         for (int trans: transportTypes) {
             request.addTransportType(trans);
         }
-
-        final ConnectivityManager connectivityManager = (ConnectivityManager) getApplicationContext().getSystemService(CONNECTIVITY_SERVICE);
-
-        connectivityManager.registerNetworkCallback(request.build(), new ConnectivityManager.NetworkCallback() {
-            @Override
-            public void onAvailable(Network network) {
-                try {
-                    if (connectivityManager.bindProcessToNetwork(network)) {
-                        NetworkCapabilities capabilities = mConnectivityManager.getNetworkCapabilities(network);
-                        if (capabilities != null) {
-                            int bandwidth = capabilities.getLinkDownstreamBandwidthKbps();
-                            Log.d(TAG, "Bandwidth for network: " + bandwidth);
-                            // we can use this network
-                            _SaveDataToKinvey();
-                        } else {
-                            Log.d(TAG, "No capabilities for network!");
-                        }
-                    } else {
-                        Log.w(TAG, "Couldn't bind process to network!");
-                        // app doesn't have android.permission.INTERNET permission
-                    }
-                } catch (IllegalStateException e) {
-                    Log.e(TAG, "ConnectivityManager.NetworkCallback.onAvailable: ", e);
-                }
-            }
-
-            @Override
-            public void onCapabilitiesChanged(Network network, NetworkCapabilities networkCapabilities) {
-                int bandwidth = networkCapabilities.getLinkDownstreamBandwidthKbps();
-                Log.d(TAG, "Network Capabilities changed to " + bandwidth + " Kbps");
-            }
-
-            @Override
-            public void onLost(Network network) {
-                Log.d(TAG, "Lost network!");
-            }
-        });
+        this.mNetworkCallback.isRegistered = true;
+        mConnectivityManager.requestNetwork(request.build(), this.mNetworkCallback, NETWORK_CONNECTIVITY_TIMEOUT_MS);
     }
 
     public void _RequestNetworkAndSend() {
@@ -406,7 +439,7 @@ public class SensorService extends Service {
         // Add any NetworkCapabilities.TRANSPORT_
         int[] transportTypes = new int[]{ NetworkCapabilities.TRANSPORT_WIFI };
 
-        alwaysPreferNetworksWith(capabilities, transportTypes);
+        requestNetwork(capabilities, transportTypes);
     }
 
     public class TriggerSensorListener extends TriggerEventListener {
@@ -461,7 +494,7 @@ public class SensorService extends Service {
 
         public boolean hasBeenActive() {
             //Log.d(TAG, "PersonIsActive: " + personIsActive + "; watchBeingWorn: " + watchBeingWorn);
-            return true;//watchBeingWorn;
+            return watchBeingWorn;
         }
 
     }
