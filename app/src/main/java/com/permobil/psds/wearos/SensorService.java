@@ -140,7 +140,7 @@ public class SensorService extends Service {
         Client mKinveyClient = ((App) getApplication()).getSharedClient();
 
         // Get the Kinvey Data Collection for storing data
-        this.psdsDataStore = DataStore.collection("PSDSData", PSDSData.class, StoreType.SYNC, mKinveyClient);
+        this.psdsDataStore = DataStore.collection("PSDSData", PSDSData.class, StoreType.CACHE, mKinveyClient);
 
         // clear the datastore (from previous app runs)
         _PurgeLocalData();
@@ -176,6 +176,7 @@ public class SensorService extends Service {
 
                 // clear out any old info from last time we ran
                 isPushing = false;
+                isSaving = false;
 
                 // Handle wake_lock so data collection can continue even when screen turns off
                 // without wake_lock the service will stop bc the CPU gives up
@@ -392,7 +393,6 @@ public class SensorService extends Service {
 
     public void _UnregisterNetwork() {
         Log.d(TAG, "Unbinding network");
-        isPushing = false;
         mConnectivityManager.bindProcessToNetwork(null);
         if (isRegistered) {
             // unregister network
