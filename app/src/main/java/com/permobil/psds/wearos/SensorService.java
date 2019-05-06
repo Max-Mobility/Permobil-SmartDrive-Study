@@ -64,7 +64,7 @@ public class SensorService extends Service {
     private NotificationManager notificationManager;
     private Notification notification;
     private DataStore<PSDSData> psdsDataStore;
-    private MyHandler mHandler;
+    private Handler mHandler;
     private WakeLock mWakeLock;
     private String userIdentifier;
     private String deviceUUID;
@@ -74,7 +74,6 @@ public class SensorService extends Service {
     private SensorEventListener mListener;
     private SensorManager mSensorManager;
     private ConnectivityManager mConnectivityManager;
-    private NetworkCallback mNetworkCallback;
 
     private Sensor mSignificantMotion;
     private Sensor mLinearAcceleration;
@@ -92,29 +91,14 @@ public class SensorService extends Service {
     public boolean personIsActive = false;
     public boolean watchBeingWorn = false;
 
-    public boolean isPushing = false;
-    public boolean isSaving = false;
-    public boolean isRegistered = false;
     public long numRecordsPushed = 0;
     public long numRecordsSaved = 0;
+    public PushCallback mPushCallback;
+    public SaveCallback mSaveCallback;
+    public PurgeCallback mPurgeCallback;
 
     public boolean isServiceRunning = false;
     public ArrayList<PSDSData.SensorData> sensorServiceDataList = new ArrayList<>();
-
-    // This needs to be static to avoid potentially leaking the parent class
-    private class MyHandler extends Handler {
-        @Override
-        public void handleMessage(Message msg) {
-            super.handleMessage(msg);
-            switch (msg.what) {
-                case MESSAGE_CONNECTIVITY_TIMEOUT:
-                    Log.d(TAG, "NetworkCallback Connectivity Timeout!");
-                    _UnregisterNetwork();
-                    getApplicationContext().startActivity(new Intent("com.google.android.clockwork.settings.connectivity.wifi.ADD_NETWORK_SETTINGS"));
-                    break;
-            }
-        }
-    }
 
     public SensorService() {
     }
@@ -135,12 +119,16 @@ public class SensorService extends Service {
         String uuid = android.provider.Settings.Secure.getString(getContentResolver(),
                 android.provider.Settings.Secure.ANDROID_ID);
         this.deviceUUID = uuid;
-        this.mHandler = new MyHandler();
+        this.mHandler = new Handler();
+
+        this.mSaveCallback = new SaveCallback<PSDSData>();
+        this.mPushCallback = new PushCallback();
+        this.mPurgeCallback = new PurgeCallback();
 
         Client mKinveyClient = ((App) getApplication()).getSharedClient();
 
         // Get the Kinvey Data Collection for storing data
-        this.psdsDataStore = DataStore.collection("PSDSData", PSDSData.class, StoreType.CACHE, mKinveyClient);
+        this.psdsDataStore = DataStore.collection("PSDSData", PSDSData.class, StoreType.AUTO, mKinveyClient);
 
         // clear the datastore (from previous app runs)
         _PurgeLocalData();
@@ -152,8 +140,6 @@ public class SensorService extends Service {
 
         // Get the ConnectivityManager so we can turn on wifi before saving
         mConnectivityManager = (ConnectivityManager) this.getSystemService(Context.CONNECTIVITY_SERVICE);
-        // save the callback we'll use
-        mNetworkCallback = new NetworkCallback();
 
         isServiceRunning = false;
     }
@@ -173,10 +159,6 @@ public class SensorService extends Service {
                 startServiceWithNotification();
 
                 Log.d(TAG, "starting service!");
-
-                // clear out any old info from last time we ran
-                isPushing = false;
-                isSaving = false;
 
                 // Handle wake_lock so data collection can continue even when screen turns off
                 // without wake_lock the service will stop bc the CPU gives up
@@ -206,31 +188,12 @@ public class SensorService extends Service {
 
     private void _PurgeLocalData() {
         Log.d(TAG, "_PurgeLocalData()");
-        isPushing = false;
-        isSaving = true;
         try {
             long numToSend = psdsDataStore.syncCount();
             Log.d(TAG, "Purging " + numToSend + " records from the DB");
             psdsDataStore.clear(); // we have nothing unsent, clear the storage
-            psdsDataStore.purge(new KinveyPurgeCallback() {
-                @Override
-                public void onSuccess(Void aVoid) {
-                    isSaving = false;
-                    Log.d(TAG, "purged datastore");
-                }
-
-                @Override
-                public void onFailure(Throwable throwable) {
-                    isSaving = false;
-                    Log.e(TAG, "Kinvey purge failure message" + ": " + throwable.getMessage());
-                    Log.e(TAG, "Kinvey purge failure cause: " + throwable.getCause());
-                    sendMessageToActivity(throwable.getMessage());
-                    Sentry.capture(throwable);
-
-                }
-            });
+            //psdsDataStore.purge(this.mPurgeCallback);
         } catch (KinveyException ke) {
-            isSaving = false;
             Log.e(TAG, "Error purging kinvey database" + ke.getReason());
             sendMessageToActivity("Error trying to purge database: " + ke.getExplanation());
             Sentry.capture(ke);
@@ -239,67 +202,90 @@ public class SensorService extends Service {
 
     private void _PushDataToKinvey() {
         Log.d(TAG, "_PushDataToKinvey()...");
-        if (isPushing) {
-            return;
-        }
         long numToSend = psdsDataStore.syncCount();
         if (numToSend == 0) {
             Log.d(TAG, "No unsent data, clearing the storage.");
             _PurgeLocalData();
-            _UnregisterNetwork();
         } else {
-            isPushing = true;
             Log.d(TAG, "Pushing to kinvey: " + numToSend);
             sendMessageToActivity("Sending " + numToSend + " records to backend");
             try {
-                psdsDataStore.push(new KinveyPushCallback() {
-                    @Override
-                    public void onSuccess(KinveyPushResponse kinveyPushResponse) {
-                        isPushing = false;
-                        int successCount = kinveyPushResponse.getSuccessCount();
-                        Log.d(TAG, "Data pushed to Kinvey successfully. Success Count = " + successCount);
-                        sendMessageToActivity("Data service synced " + successCount + " records to backend successfully.");
-                        _UnregisterNetwork();
-                    }
-
-                    @Override
-                    public void onFailure(Throwable throwable) {
-                        isPushing = false;
-                        Log.e(TAG, "Kinvey push failure message" + ": " + throwable.getMessage());
-                        Log.e(TAG, "Kinvey push failure cause: " + throwable.getCause());
-                        sendMessageToActivity(throwable.getMessage());
-                        Sentry.capture(throwable);
-                        _UnregisterNetwork();
-                    }
-
-                    @Override
-                    public void onProgress(long current, long all) {
-                        isPushing = true;
-                        Log.d(TAG, "Kinvey push progress: " + current + " / " + all);
-                        sendMessageToActivity("Sent " + current + " / " + all + " records to backend");
-                    }
-                });
+                psdsDataStore.push(this.mPushCallback);
             } catch (KinveyException ke) {
-                isPushing = false;
                 Log.e(TAG, "Error pushing kinvey record for sensor data. " + ke.getReason());
                 sendMessageToActivity("Error trying to push data to backend: " + ke.getExplanation());
                 Sentry.capture(ke);
-                _UnregisterNetwork();
+            } catch (Exception e) {
+                Log.e(TAG, "Exception:" + e.getMessage());
+                sendMessageToActivity("Error pushing: " + e.getMessage());
+                Sentry.capture(e);
             }
         }
     }
 
+    private class PurgeCallback implements KinveyPurgeCallback {
+        @Override
+        public void onSuccess(Void aVoid) {
+            Log.d(TAG, "purged datastore");
+        }
+
+        @Override
+        public void onFailure(Throwable throwable) {
+            Log.e(TAG, "Kinvey purge failure message" + ": " + throwable.getMessage());
+            Log.e(TAG, "Kinvey purge failure cause: " + throwable.getCause());
+            sendMessageToActivity(throwable.getMessage());
+            Sentry.capture(throwable);
+
+        }
+
+    }
+
+    private class PushCallback implements KinveyPushCallback {
+        @Override
+        public void onSuccess(KinveyPushResponse kinveyPushResponse) {
+            int successCount = kinveyPushResponse.getSuccessCount();
+            Log.d(TAG, "Data pushed to Kinvey successfully. Success Count = " + successCount);
+            sendMessageToActivity("Data service synced " + successCount + " records to backend successfully.");
+        }
+
+        @Override
+        public void onFailure(Throwable throwable) {
+            Log.e(TAG, "Kinvey push failure message" + ": " + throwable.getMessage());
+            Log.e(TAG, "Kinvey push failure cause: " + throwable.getCause());
+            sendMessageToActivity(throwable.getMessage());
+            Sentry.capture(throwable);
+        }
+
+        @Override
+        public void onProgress(long current, long all) {
+            Log.d(TAG, "Kinvey push progress: " + current + " / " + all);
+            sendMessageToActivity("Sent " + current + " / " + all + " records to backend");
+        }
+    }
+
+    private class SaveCallback<T> implements KinveyClientCallback<T> {
+        @Override
+        public void onSuccess(T result) {
+            // Push data to Kinvey backend.
+            _PushDataToKinvey();
+        }
+
+        @Override
+        public void onFailure(Throwable throwable) {
+            Log.e(TAG, "Kinvey SAVE() Failure: " + throwable.getMessage());
+            sendMessageToActivity("Error saving data: " + throwable.getMessage());
+            Sentry.capture(throwable);
+        }
+
+    }
+
     private void _SaveDataToKinvey() {
         Log.d(TAG, "_SaveDataToKinvey()...");
-        if (isSaving || isPushing) {
-            return;
-        }
         // adding an empty check to avoid pushing the initial service starting records with no sensor_data since the intervals haven't clocked at that time
         if (sensorServiceDataList.isEmpty()) {
             Log.d(TAG, "Sensor data list is empty, so will not save/push this record.");
             _PushDataToKinvey();
         } else {
-            isSaving = true;
             PSDSData data = new PSDSData();
             data.user_identifier = this.userIdentifier;
             data.device_uuid = this.deviceUUID;
@@ -312,40 +298,32 @@ public class SensorService extends Service {
                 Log.w(TAG, "Unable to get device location because LOCATION permission has not been granted.");
                 data.location = null;
             } else {
-                Location loc = mLocationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+                Location loc;
+                loc = mLocationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
                 if (loc != null) {
                     data.location = new PSDSLocation(loc.getLatitude(), loc.getLongitude(), loc.getTime());
                 } else {
-                    data.location = null;
+                    loc = mLocationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+                    if (loc != null) {
+                        data.location = new PSDSLocation(loc.getLatitude(), loc.getLongitude(), loc.getTime());
+                    } else {
+                        data.location = null;
+                    }
                 }
                 Log.d(TAG, "Data location: " + data.location);
             }
 
             try {
-                psdsDataStore.save(data, new KinveyClientCallback<PSDSData>() {
-                    @Override
-                    public void onSuccess(PSDSData result) {
-                        isSaving = false;
-                        // Push data to Kinvey backend.
-                        _PushDataToKinvey();
-                    }
-
-                    @Override
-                    public void onFailure(Throwable throwable) {
-                        isSaving = false;
-                        Log.e(TAG, "Kinvey SAVE() Failure: " + throwable.getMessage());
-                        sendMessageToActivity("Error saving data: " + throwable.getMessage());
-                        Sentry.capture(throwable);
-                        _UnregisterNetwork();
-                    }
-                });
+                psdsDataStore.save(data, this.mSaveCallback);
 
             } catch (KinveyException ke) {
-                isSaving = false;
                 Log.e(TAG, "Error saving kinvey record for sensor data. " + ke.getReason());
                 sendMessageToActivity("Error trying to save data to backend: " + ke.getExplanation());
                 Sentry.capture(ke);
-                _UnregisterNetwork();
+            } catch (Exception e) {
+                Log.e(TAG, "Exception:" + e.getMessage());
+                sendMessageToActivity("Error saving: " + e.getMessage());
+                Sentry.capture(e);
             }
         }
     }
@@ -360,9 +338,6 @@ public class SensorService extends Service {
             this.mWakeLock.release();
         }
 
-        // remove network monitor
-        _UnregisterNetwork();
-
         // remove sensor listeners
         _unregisterDeviceSensors();
 
@@ -372,65 +347,66 @@ public class SensorService extends Service {
         isServiceRunning = false;
     }
 
-    public void _RequestNetworkAndSend() {
-        if (!isPushing) {
-            Log.d(TAG, "Binding network");
-            NetworkRequest request = new NetworkRequest.Builder()
-                    .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-                    .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
-                    .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
-                    .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                    .build();
+    private void alwaysPreferNetworksWith(int[] capabilities, int[] transportTypes) {
 
-            mConnectivityManager.requestNetwork(request, mNetworkCallback);
-            isRegistered = true;
+        NetworkRequest.Builder request = new NetworkRequest.Builder();
 
-            mHandler.sendMessageDelayed(
-                    mHandler.obtainMessage(MESSAGE_CONNECTIVITY_TIMEOUT),
-                    NETWORK_CONNECTIVITY_TIMEOUT_MS);
+        // add capabilities
+        for (int cap: capabilities) {
+            request.addCapability(cap);
         }
-    }
 
-    public void _UnregisterNetwork() {
-        Log.d(TAG, "Unbinding network");
-        mConnectivityManager.bindProcessToNetwork(null);
-        if (isRegistered) {
-            // unregister network
-            mConnectivityManager.unregisterNetworkCallback(mNetworkCallback);
+        // add transport types
+        for (int trans: transportTypes) {
+            request.addTransportType(trans);
         }
-        isRegistered = false;
-    }
 
-    public class NetworkCallback extends ConnectivityManager.NetworkCallback {
-        @Override
-        public void onAvailable(Network network) {
-            mHandler.removeMessages(MESSAGE_CONNECTIVITY_TIMEOUT);
-            if (network != null) {
-                if (mConnectivityManager.bindProcessToNetwork(network)) {
-                    NetworkCapabilities capabilities = mConnectivityManager.getNetworkCapabilities(network);
-                    if (capabilities != null) {
-                        int bandwidth = capabilities.getLinkDownstreamBandwidthKbps();
-                        Log.d(TAG, "Bandwidth for network: " + bandwidth);
-                        // we can use this network
-                        _SaveDataToKinvey();
+        final ConnectivityManager connectivityManager = (ConnectivityManager) getApplicationContext().getSystemService(CONNECTIVITY_SERVICE);
+
+        connectivityManager.registerNetworkCallback(request.build(), new ConnectivityManager.NetworkCallback() {
+            @Override
+            public void onAvailable(Network network) {
+                try {
+                    if (connectivityManager.bindProcessToNetwork(network)) {
+                        NetworkCapabilities capabilities = mConnectivityManager.getNetworkCapabilities(network);
+                        if (capabilities != null) {
+                            int bandwidth = capabilities.getLinkDownstreamBandwidthKbps();
+                            Log.d(TAG, "Bandwidth for network: " + bandwidth);
+                            // we can use this network
+                            _SaveDataToKinvey();
+                        } else {
+                            Log.d(TAG, "No capabilities for network!");
+                        }
+                    } else {
+                        Log.w(TAG, "Couldn't bind process to network!");
+                        // app doesn't have android.permission.INTERNET permission
                     }
-                } else {
-                    Log.w(TAG, "Couldn't bind process to network!");
-                    // app doesn't have android.permission.INTERNET permission
+                } catch (IllegalStateException e) {
+                    Log.e(TAG, "ConnectivityManager.NetworkCallback.onAvailable: ", e);
                 }
             }
-        }
 
-        @Override
-        public void onCapabilitiesChanged(Network network, NetworkCapabilities networkCapabilities) {
-            int bandwidth = networkCapabilities.getLinkDownstreamBandwidthKbps();
-            Log.d(TAG, "Network Capabilities changed to " + bandwidth + " Kbps");
-        }
+            @Override
+            public void onCapabilitiesChanged(Network network, NetworkCapabilities networkCapabilities) {
+                int bandwidth = networkCapabilities.getLinkDownstreamBandwidthKbps();
+                Log.d(TAG, "Network Capabilities changed to " + bandwidth + " Kbps");
+            }
 
-        @Override
-        public void onLost(Network network) {
-            Log.d(TAG, "Lost network!");
-        }
+            @Override
+            public void onLost(Network network) {
+                Log.d(TAG, "Lost network!");
+            }
+        });
+    }
+
+    public void _RequestNetworkAndSend() {
+        // Add any NetworkCapabilities.NET_CAPABILITY_
+        int[] capabilities = new int[]{ NetworkCapabilities.NET_CAPABILITY_INTERNET, NetworkCapabilities.NET_CAPABILITY_NOT_METERED };
+
+        // Add any NetworkCapabilities.TRANSPORT_
+        int[] transportTypes = new int[]{ NetworkCapabilities.TRANSPORT_WIFI };
+
+        alwaysPreferNetworksWith(capabilities, transportTypes);
     }
 
     public class TriggerSensorListener extends TriggerEventListener {
@@ -485,7 +461,7 @@ public class SensorService extends Service {
 
         public boolean hasBeenActive() {
             //Log.d(TAG, "PersonIsActive: " + personIsActive + "; watchBeingWorn: " + watchBeingWorn);
-            return watchBeingWorn;
+            return true;//watchBeingWorn;
         }
 
     }
