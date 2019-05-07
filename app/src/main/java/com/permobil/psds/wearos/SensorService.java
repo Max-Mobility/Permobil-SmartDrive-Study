@@ -246,7 +246,7 @@ public class SensorService extends Service {
                 // TODO: Possibly login here so that we don't worry about it later?
                 // TODO: iteratively POST objects to Kinvey PSDSData collection Endpoint
                 PSDSData data = new PSDSData();
-                data.user_identifier = "WILLIAM TEST";
+                data.user_identifier = this.userIdentifier;
                 data.device_uuid = this.deviceUUID;
                 Call<PSDSData> call = mKinveyApiService.sendData(mKinveyAuthorization, data);
                 call.enqueue(new Callback<PSDSData>() {
@@ -259,6 +259,7 @@ public class SensorService extends Service {
                     @Override
                     public void onFailure(Call<PSDSData> call, Throwable t) {
                         Log.d(TAG, "onFailure()..." + t.getMessage());
+                        Log.d(TAG, "call:" + call.request().toString());
                         sendMessageToActivity("Failure sending to database: " + t.getMessage());
                         Sentry.capture(t);
                         unregisterNetwork();
@@ -278,7 +279,6 @@ public class SensorService extends Service {
         // adding an empty check to avoid pushing the initial service starting records with no sensor_data since the intervals haven't clocked at that time
         if (sensorServiceDataList.isEmpty()) {
             Log.d(TAG, "Sensor data list is empty, so will not save/push this record.");
-            _PushDataToKinvey();
         } else {
             PSDSData data = new PSDSData();
             data.user_identifier = this.userIdentifier;
