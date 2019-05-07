@@ -61,6 +61,7 @@ public class SensorService extends Service {
     private String userIdentifier;
     private String deviceUUID;
 
+    private SensorDbHandler db;
     private Builder notificationBuilder;
     private NotificationManager notificationManager;
     private Notification notification;
@@ -119,6 +120,10 @@ public class SensorService extends Service {
         super.onCreate();
         Log.d(TAG, "SensorService onCreate...");
         startServiceWithNotification();
+
+        Log.d(TAG, "Create sensor SQLite database...");
+        db = new SensorDbHandler(getApplicationContext());
+        Log.d(TAG, "SQLite DB created: " + db);
 
         @SuppressLint("HardwareIds")
         String uuid = android.provider.Settings.Secure.getString(getContentResolver(),
@@ -402,11 +407,11 @@ public class SensorService extends Service {
         }
         NetworkRequest.Builder request = new NetworkRequest.Builder();
         // add capabilities
-        for (int cap: capabilities) {
+        for (int cap : capabilities) {
             request.addCapability(cap);
         }
         // add transport types
-        for (int trans: transportTypes) {
+        for (int trans : transportTypes) {
             request.addTransportType(trans);
         }
         this.mNetworkCallback.isRegistered = true;
@@ -415,10 +420,10 @@ public class SensorService extends Service {
 
     public void _RequestNetworkAndSend() {
         // Add any NetworkCapabilities.NET_CAPABILITY_
-        int[] capabilities = new int[]{ NetworkCapabilities.NET_CAPABILITY_INTERNET, NetworkCapabilities.NET_CAPABILITY_NOT_METERED };
+        int[] capabilities = new int[]{NetworkCapabilities.NET_CAPABILITY_INTERNET, NetworkCapabilities.NET_CAPABILITY_NOT_METERED};
 
         // Add any NetworkCapabilities.TRANSPORT_
-        int[] transportTypes = new int[]{ NetworkCapabilities.TRANSPORT_WIFI };
+        int[] transportTypes = new int[]{NetworkCapabilities.TRANSPORT_WIFI};
 
         requestNetwork(capabilities, transportTypes);
     }
@@ -450,6 +455,8 @@ public class SensorService extends Service {
                     // create new SensorServiceData
                     PSDSData.SensorData data = new PSDSData.SensorData(event.sensor.getType(), event.timestamp, dataList);
                     sensorServiceDataList.add(data);
+                    db.addRecord(new SensorSqlData(data.toString()));
+                    Log.d(TAG, "added record to SQLite database...");
                 }
             }
         }
