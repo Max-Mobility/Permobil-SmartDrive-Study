@@ -42,6 +42,9 @@ import java.util.Objects;
 import java.util.concurrent.Callable;
 
 import io.reactivex.Observable;
+import io.reactivex.Scheduler;
+import io.reactivex.android.schedulers.AndroidSchedulers;
+import io.reactivex.schedulers.Schedulers;
 import io.sentry.Sentry;
 import io.sentry.event.UserBuilder;
 /*
@@ -238,37 +241,6 @@ public class SensorService extends Service {
             Sentry.capture(e);
         }
     }
-    /*
-    public class ApiCallback<T> extends Callback<T> {
-        public int index = 0;
-        public ApiCallback(int _index) {
-            index = _index;
-        }
-
-        @Override
-        public void onResponse(Call<T> call, Response<T> response) {
-            Log.d(TAG, "onResponse()...");
-            if (response.isSuccessful()) {
-
-            } else {
-
-            }
-            Log.d(TAG, "Sent index " + index + " to database.");
-            sendMessageToActivity("Sent index " + index + " to database.");
-            dataList.subList(index, index+1).clear();
-            unregisterNetwork();
-        }
-
-        @Override
-        public void onFailure(Call<T> call, Throwable t) {
-            Log.d(TAG, "onFailure()..." + t.getMessage());
-            Log.d(TAG, "call:" + call.request().toString());
-            sendMessageToActivity("Failure sending to database: " + t.getMessage());
-            Sentry.capture(t);
-            unregisterNetwork();
-        }
-    }
-    */
 
     private void _PushDataToKinvey() {
         Log.d(TAG, "_PushDataToKinvey()...");
@@ -286,25 +258,29 @@ public class SensorService extends Service {
                 List allRecords = db.getAllRecords();
                 Log.d(TAG, "Got all records from SQLite DB for sensor data..." + allRecords.size());
                 // TODO: this results in an error after the first one or two are sent
-                Observable<PSDSData> observable = Observable.fromIterable(dataList);
-                observable
+                List<PSDSData> local = dataList;
+                dataList = new ArrayList<>();
+                Observable.just(local)
+                        .flatMap(Observable::fromIterable)
                         .flatMap(x -> mKinveyApiService.sendData(mKinveyAuthorization, x))
-                        .subscribe(
-                        item -> {
-                            //mKinveyApiService.sendData(mKinveyAuthorization, item);
-                            Log.d(TAG, "item sent: " + item);
-                        },
-                        error -> {
-                            Log.e(TAG, "error: " + error.getMessage());
-                            unregisterNetwork();
-                        },
-                        () -> {
-                            Log.d(TAG, "onCompleted()");
-                            unregisterNetwork();
-                        }
-                );
-                //Call<PSDSData> call = mKinveyApiService.sendData(mKinveyAuthorization, data);
-                //call.enqueue(new ApiCallback<PSDSData>(index));
+                        .subscribeOn(Schedulers.io())
+                        .observeOn(AndroidSchedulers.mainThread())
+                        .unsubscribeOn(Schedulers.io())
+                        .subscribe(item -> {
+                                Log.d(TAG, "item sent");
+                                // TODO: remove item from array / DB
+                            },
+                            error -> {
+                                Log.e(TAG, "error: " + error.getMessage());
+                                Log.e(TAG, "       " + error.toString());
+                                Sentry.capture(error);
+                                unregisterNetwork();
+                            },
+                            () -> {
+                                Log.d(TAG, "onCompleted()");
+                                // TODO: clear array / DB
+                                unregisterNetwork();
+                            });
             } catch (Exception e) {
                 Log.e(TAG, "Exception pushing to kinvey:" + e.getMessage());
                 sendMessageToActivity("Error sending to database: " + e.getMessage());
