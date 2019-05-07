@@ -29,6 +29,7 @@ import android.os.Message;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
+import android.provider.Telephony;
 import android.util.Base64;
 import android.util.Log;
 
@@ -42,6 +43,9 @@ import java.util.Objects;
 
 import io.sentry.Sentry;
 import io.sentry.event.UserBuilder;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
 import retrofit2.Retrofit;
 import retrofit2.adapter.rxjava2.RxJava2CallAdapterFactory;
 import retrofit2.converter.gson.GsonConverterFactory;
@@ -147,7 +151,7 @@ public class SensorService extends Service {
             // save the authorization string needed for kinvey
             String authorizationToEncode = "bradwaynemartin@gmail.com:testtest";
             byte[] data = authorizationToEncode.getBytes("UTF-8");
-            mKinveyAuthorization = Base64.encodeToString(data, Base64.DEFAULT);
+            mKinveyAuthorization = Base64.encodeToString(data, Base64.NO_WRAP);
             Log.d(TAG, "original: '"+authorizationToEncode+"'");
             Log.d(TAG, "Base 64:  '"+mKinveyAuthorization+"'");
             mKinveyAuthorization = "Basic " + mKinveyAuthorization;
@@ -244,7 +248,22 @@ public class SensorService extends Service {
                 PSDSData data = new PSDSData();
                 data.user_identifier = "WILLIAM TEST";
                 data.device_uuid = this.deviceUUID;
-                mKinveyApiService.sendData(mKinveyAuthorization, data);
+                Call<PSDSData> call = mKinveyApiService.sendData(mKinveyAuthorization, data);
+                call.enqueue(new Callback<PSDSData>() {
+                    @Override
+                    public void onResponse(Call<PSDSData> call, Response<PSDSData> response) {
+                        Log.d(TAG, "onResponse()...");
+                        unregisterNetwork();
+                    }
+
+                    @Override
+                    public void onFailure(Call<PSDSData> call, Throwable t) {
+                        Log.d(TAG, "onFailure()..." + t.getMessage());
+                        sendMessageToActivity("Failure sending to database: " + t.getMessage());
+                        Sentry.capture(t);
+                        unregisterNetwork();
+                    }
+                });
             } catch (Exception e) {
                 Log.e(TAG, "Exception pushing to kinvey:" + e.getMessage());
                 sendMessageToActivity("Error sending to database: " + e.getMessage());
