@@ -29,12 +29,14 @@ import android.os.Message;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
+import android.util.Base64;
 import android.util.Log;
 
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat.Builder;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
+import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Objects;
 
@@ -52,7 +54,7 @@ public class SensorService extends Service {
     private static final int sensorDelay = android.hardware.SensorManager.SENSOR_DELAY_UI;
     private static final int maxReportingLatency = 1000000; // 10 seconds between sensor updates
     private static final int SAVE_TASK_PERIOD_MS = 1 * 60 * 1000;
-    private static final int SEND_TASK_PERIOD_MS = 30 * 60 * 1000;
+    private static final int SEND_TASK_PERIOD_MS = 1 * 60 * 1000;
 
     private String userIdentifier;
     private String deviceUUID;
@@ -62,6 +64,8 @@ public class SensorService extends Service {
     private Notification notification;
 
     private Retrofit retrofit;
+    private KinveyApiService mKinveyApiService;
+    private String mKinveyAuthorization;
 
     private WakeLock mWakeLock;
 
@@ -131,10 +135,27 @@ public class SensorService extends Service {
 
         // create the retrofit instance
         retrofit = new Retrofit.Builder()
-                .baseUrl("https://baas.kinvey.com")
+                .baseUrl(Constants.API_BASE)
                 .addConverterFactory(GsonConverterFactory.create())
                 .addCallAdapterFactory(RxJava2CallAdapterFactory.create())
                 .build();
+
+        // create an instance of the KinveyApiService
+        mKinveyApiService = retrofit.create(KinveyApiService.class);
+
+        try {
+            // save the authorization string needed for kinvey
+            String authorizationToEncode = "bradwaynemartin@gmail.com:testtest";
+            byte[] data = authorizationToEncode.getBytes("UTF-8");
+            mKinveyAuthorization = Base64.encodeToString(data, Base64.DEFAULT);
+            Log.d(TAG, "original: '"+authorizationToEncode+"'");
+            Log.d(TAG, "Base 64:  '"+mKinveyAuthorization+"'");
+            mKinveyAuthorization = "Basic " + mKinveyAuthorization;
+            Log.d(TAG, "Authorization: '"+mKinveyAuthorization+"'");
+        } catch (UnsupportedEncodingException e) {
+            Log.e(TAG, "Base64 encode exception: " + e.getMessage());
+            Sentry.capture(e);
+        }
 
         Log.d(TAG, "providers: " + mLocationManager.getProviders(false));
 
@@ -159,10 +180,6 @@ public class SensorService extends Service {
                 startServiceWithNotification();
 
                 Log.d(TAG, "starting service!");
-
-                // TODO: Login to kinvey
-                // TODO: Save credentials for later pushing
-                // TODO: keep track of when they expire to renew them
 
                 // Handle wake_lock so data collection can continue even when screen turns off
                 // without wake_lock the service will stop bc the CPU gives up
@@ -211,7 +228,7 @@ public class SensorService extends Service {
     private void _PushDataToKinvey() {
         Log.d(TAG, "_PushDataToKinvey()...");
         // TODO: determine if we need to send records
-        long numToSend = 0;//psdsDataStore.syncCount();
+        long numToSend = 1;//psdsDataStore.syncCount();
         if (numToSend == 0) {
             Log.d(TAG, "No unsent data, clearing the storage.");
             _PurgeLocalData();
@@ -224,6 +241,10 @@ public class SensorService extends Service {
                 // TODO: marshall data into REST API call
                 // TODO: Possibly login here so that we don't worry about it later?
                 // TODO: iteratively POST objects to Kinvey PSDSData collection Endpoint
+                PSDSData data = new PSDSData();
+                data.user_identifier = "WILLIAM TEST";
+                data.device_uuid = this.deviceUUID;
+                mKinveyApiService.sendData(mKinveyAuthorization, data);
             } catch (Exception e) {
                 Log.e(TAG, "Exception pushing to kinvey:" + e.getMessage());
                 sendMessageToActivity("Error sending to database: " + e.getMessage());
