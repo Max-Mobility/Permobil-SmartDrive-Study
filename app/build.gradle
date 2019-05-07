@@ -15,6 +15,16 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+    packagingOptions {
+        exclude 'META-INF/DEPENDENCIES'
+        exclude 'META-INF/LICENSE'
+        exclude 'META-INF/LICENSE.txt'
+        exclude 'META-INF/license.txt'
+        exclude 'META-INF/NOTICE'
+        exclude 'META-INF/NOTICE.txt'
+        exclude 'META-INF/notice.txt'
+        exclude 'META-INF/ASL2.0'
+    }
 }
 
 configurations {
@@ -24,11 +34,11 @@ configurations {
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     // RETROFIT -------------------------------------------------------------------
-    implementation 'com.squareup.retrofit2:retrofit:2.4.0'
-    implementation 'com.squareup.retrofit2:converter-gson:2.4.0'
+    implementation 'com.squareup.retrofit2:retrofit:2.5.0'
+    implementation 'com.squareup.retrofit2:converter-gson:2.5.0'
     implementation 'io.reactivex.rxjava2:rxandroid:2.0.2'
     implementation 'io.reactivex.rxjava2:rxjava:2.1.13'
-    implementation 'com.squareup.retrofit2:adapter-rxjava2:2.4.0'
+    implementation 'com.squareup.retrofit2:adapter-rxjava2:2.5.0'
     // --------------------------------------------------------------------------
     // SENTRY -----------------------------------------------------------------
     implementation 'io.sentry:sentry-android:1.7.21'
@@ -36,6 +46,7 @@ dependencies {
     // this dependency is not required if you are already using your own slf4j implementation
     implementation 'org.slf4j:slf4j-nop:1.7.25'
     // ------------------------------------------------------------------------
+    implementation 'com.google.api-client:google-api-client:1.28.0'
     implementation 'com.google.android.support:wearable:2.4.0'
     implementation 'com.google.android.gms:play-services-wearable:16.0.1'
     implementation 'androidx.percentlayout:percentlayout:1.0.0'
