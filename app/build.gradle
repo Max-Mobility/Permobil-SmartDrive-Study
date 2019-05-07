@@ -42,9 +42,9 @@ dependencies {
     // --------------------------------------------------------------------------
     // SENTRY -----------------------------------------------------------------
     implementation 'io.sentry:sentry-android:1.7.21'
-    //implementation 'org.slf4j:slf4j-api:1.7.25'
+    implementation 'org.slf4j:slf4j-api:1.7.25'
     // this dependency is not required if you are already using your own slf4j implementation
-    implementation 'org.slf4j:slf4j-nop:1.7.25'
+    //implementation 'org.slf4j:slf4j-nop:1.7.25'
     // ------------------------------------------------------------------------
     implementation 'com.google.api-client:google-api-client:1.28.0'
     implementation 'com.google.android.support:wearable:2.4.0'
