@@ -130,7 +130,7 @@ public class SensorService extends Service {
         Client mKinveyClient = ((App) getApplication()).getSharedClient();
 
         // Get the Kinvey Data Collection for storing data
-        this.psdsDataStore = DataStore.collection("PSDSData", PSDSData.class, StoreType.AUTO, mKinveyClient);
+        this.psdsDataStore = DataStore.collection("PSDSData", PSDSData.class, StoreType.SYNC, mKinveyClient);
 
         // clear the datastore (from previous app runs)
         _PurgeLocalData();
@@ -197,7 +197,7 @@ public class SensorService extends Service {
             long numToSend = psdsDataStore.syncCount();
             Log.d(TAG, "Purging " + numToSend + " records from the DB");
             psdsDataStore.clear(); // we have nothing unsent, clear the storage
-            //psdsDataStore.purge(this.mPurgeCallback);
+            psdsDataStore.purge(this.mPurgeCallback);
         } catch (KinveyException ke) {
             Log.e(TAG, "Error purging kinvey database" + ke.getReason());
             sendMessageToActivity("Error trying to purge database: " + ke.getExplanation());
@@ -503,7 +503,6 @@ public class SensorService extends Service {
     }
 
     private void _unregisterDeviceSensors() {
-        mSensorManager = (SensorManager) getApplicationContext().getSystemService(SENSOR_SERVICE);
         // make sure we have the sensor manager for the device
         if (mSensorManager != null && mListener != null && mTriggerListener != null) {
             if (mLinearAcceleration != null)
