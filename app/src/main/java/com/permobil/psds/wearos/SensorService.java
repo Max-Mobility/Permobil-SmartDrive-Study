@@ -60,7 +60,6 @@ public class SensorService extends Service {
     private Builder notificationBuilder;
     private NotificationManager notificationManager;
     private Notification notification;
-    //private DataStore<PSDSData> psdsDataStore;
 
     private Retrofit retrofit;
 
@@ -96,9 +95,6 @@ public class SensorService extends Service {
 
     public long numRecordsPushed = 0;
     public long numRecordsSaved = 0;
-    public PushCallback mPushCallback;
-    public SaveCallback mSaveCallback;
-    public PurgeCallback mPurgeCallback;
 
     public boolean isServiceRunning = false;
     public ArrayList<PSDSData.SensorData> sensorServiceDataList = new ArrayList<>();
@@ -123,10 +119,6 @@ public class SensorService extends Service {
                 android.provider.Settings.Secure.ANDROID_ID);
         this.deviceUUID = uuid;
         this.mHandler = new Handler();
-
-        this.mSaveCallback = new SaveCallback<PSDSData>();
-        this.mPushCallback = new PushCallback();
-        this.mPurgeCallback = new PurgeCallback();
 
         // clear the datastore (from previous app runs)
         _PurgeLocalData();
@@ -218,7 +210,8 @@ public class SensorService extends Service {
 
     private void _PushDataToKinvey() {
         Log.d(TAG, "_PushDataToKinvey()...");
-        long numToSend = psdsDataStore.syncCount();
+        // TODO: determine if we need to send records
+        long numToSend = 0;//psdsDataStore.syncCount();
         if (numToSend == 0) {
             Log.d(TAG, "No unsent data, clearing the storage.");
             _PurgeLocalData();
