@@ -1,9 +1,7 @@
 package com.permobil.psds.wearos;
 
-import java.util.List;
 
-import retrofit2.Call;
-import retrofit2.Callback;
+import io.reactivex.Observable;
 import retrofit2.http.Body;
 import retrofit2.http.Header;
 import retrofit2.http.Headers;
@@ -14,5 +12,5 @@ public interface KinveyApiService {
             "Content-Type:application/json"
     })
     @POST(Constants.API_DATA_ENDPOINT)
-    Call<PSDSData> sendData(@Header("Authorization") String authorization, @Body PSDSData data);
+    Observable<PSDSData> sendData(@Header("Authorization") String authorization, @Body PSDSData data);
 }

@@ -39,12 +39,16 @@ import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.Callable;
 
+import io.reactivex.Observable;
 import io.sentry.Sentry;
 import io.sentry.event.UserBuilder;
+/*
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
+*/
 import retrofit2.Retrofit;
 import retrofit2.adapter.rxjava2.RxJava2CallAdapterFactory;
 import retrofit2.converter.gson.GsonConverterFactory;
@@ -56,7 +60,7 @@ public class SensorService extends Service {
     private static final int NETWORK_CONNECTIVITY_TIMEOUT_MS = 60000;
     private static final int sensorDelay = android.hardware.SensorManager.SENSOR_DELAY_UI;
     private static final int maxReportingLatency = 1000000; // 10 seconds between sensor updates
-    private static final int SAVE_TASK_PERIOD_MS = 1 * 60 * 1000;
+    private static final int SAVE_TASK_PERIOD_MS = 10000;//1 * 60 * 1000;
     private static final int SEND_TASK_PERIOD_MS = 1 * 60 * 1000;
 
     private String userIdentifier;
@@ -106,6 +110,8 @@ public class SensorService extends Service {
 
     public boolean isServiceRunning = false;
     public ArrayList<PSDSData.SensorData> sensorServiceDataList = new ArrayList<>();
+
+    public List<PSDSData> dataList = new ArrayList<>();
 
     public SensorService() {
     }
@@ -232,11 +238,42 @@ public class SensorService extends Service {
             Sentry.capture(e);
         }
     }
+    /*
+    public class ApiCallback<T> extends Callback<T> {
+        public int index = 0;
+        public ApiCallback(int _index) {
+            index = _index;
+        }
+
+        @Override
+        public void onResponse(Call<T> call, Response<T> response) {
+            Log.d(TAG, "onResponse()...");
+            if (response.isSuccessful()) {
+
+            } else {
+
+            }
+            Log.d(TAG, "Sent index " + index + " to database.");
+            sendMessageToActivity("Sent index " + index + " to database.");
+            dataList.subList(index, index+1).clear();
+            unregisterNetwork();
+        }
+
+        @Override
+        public void onFailure(Call<T> call, Throwable t) {
+            Log.d(TAG, "onFailure()..." + t.getMessage());
+            Log.d(TAG, "call:" + call.request().toString());
+            sendMessageToActivity("Failure sending to database: " + t.getMessage());
+            Sentry.capture(t);
+            unregisterNetwork();
+        }
+    }
+    */
 
     private void _PushDataToKinvey() {
         Log.d(TAG, "_PushDataToKinvey()...");
         // TODO: determine if we need to send records
-        long numToSend = 1;//psdsDataStore.syncCount();
+        final int numToSend = dataList.size();
         if (numToSend == 0) {
             Log.d(TAG, "No unsent data, clearing the storage.");
             _PurgeLocalData();
@@ -246,34 +283,28 @@ public class SensorService extends Service {
             sendMessageToActivity("Sending " + numToSend + " records to backend");
             try {
                 // TODO: get data from local file system
-                // TODO: marshall data into REST API call
-                // TODO: Possibly login here so that we don't worry about it later?
-                // TODO: iteratively POST objects to Kinvey PSDSData collection Endpoint
-
                 List allRecords = db.getAllRecords();
                 Log.d(TAG, "Got all records from SQLite DB for sensor data..." + allRecords.size());
-
-                PSDSData data = new PSDSData();
-                data.user_identifier = this.userIdentifier;
-                data.device_uuid = this.deviceUUID;
-
-                Call<PSDSData> call = mKinveyApiService.sendData(mKinveyAuthorization, data);
-                call.enqueue(new Callback<PSDSData>() {
-                    @Override
-                    public void onResponse(Call<PSDSData> call, Response<PSDSData> response) {
-                        Log.d(TAG, "onResponse()...");
-                        unregisterNetwork();
-                    }
-
-                    @Override
-                    public void onFailure(Call<PSDSData> call, Throwable t) {
-                        Log.d(TAG, "onFailure()..." + t.getMessage());
-                        Log.d(TAG, "call:" + call.request().toString());
-                        sendMessageToActivity("Failure sending to database: " + t.getMessage());
-                        Sentry.capture(t);
-                        unregisterNetwork();
-                    }
-                });
+                // TODO: this results in an error after the first one or two are sent
+                Observable<PSDSData> observable = Observable.fromIterable(dataList);
+                observable
+                        .flatMap(x -> mKinveyApiService.sendData(mKinveyAuthorization, x))
+                        .subscribe(
+                        item -> {
+                            //mKinveyApiService.sendData(mKinveyAuthorization, item);
+                            Log.d(TAG, "item sent: " + item);
+                        },
+                        error -> {
+                            Log.e(TAG, "error: " + error.getMessage());
+                            unregisterNetwork();
+                        },
+                        () -> {
+                            Log.d(TAG, "onCompleted()");
+                            unregisterNetwork();
+                        }
+                );
+                //Call<PSDSData> call = mKinveyApiService.sendData(mKinveyAuthorization, data);
+                //call.enqueue(new ApiCallback<PSDSData>(index));
             } catch (Exception e) {
                 Log.e(TAG, "Exception pushing to kinvey:" + e.getMessage());
                 sendMessageToActivity("Error sending to database: " + e.getMessage());
@@ -319,6 +350,8 @@ public class SensorService extends Service {
             try {
                 db.addRecord(new SensorSqlData(data.toString()));
                 Log.d(TAG, "Added record to SQLite DB");
+                // TODO: This is just for testing
+                dataList.add(data);
             } catch (Exception e) {
                 Log.e(TAG, "Exception:" + e.getMessage());
                 sendMessageToActivity("Error saving: " + e.getMessage());
@@ -486,7 +519,7 @@ public class SensorService extends Service {
 
         public boolean hasBeenActive() {
             //Log.d(TAG, "PersonIsActive: " + personIsActive + "; watchBeingWorn: " + watchBeingWorn);
-            return watchBeingWorn;
+            return true;//watchBeingWorn;
         }
 
     }
