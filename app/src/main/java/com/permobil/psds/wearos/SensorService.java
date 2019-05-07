@@ -37,6 +37,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 import io.sentry.Sentry;
@@ -248,6 +249,10 @@ public class SensorService extends Service {
                 // TODO: marshall data into REST API call
                 // TODO: Possibly login here so that we don't worry about it later?
                 // TODO: iteratively POST objects to Kinvey PSDSData collection Endpoint
+
+                List allRecords = db.getAllRecords();
+                Log.d(TAG, "Got all records from SQLite DB for sensor data..." + allRecords.size());
+
                 PSDSData data = new PSDSData();
                 data.user_identifier = this.userIdentifier;
                 data.device_uuid = this.deviceUUID;
