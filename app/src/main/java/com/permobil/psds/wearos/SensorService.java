@@ -155,10 +155,10 @@ public class SensorService extends Service {
             String authorizationToEncode = "bradwaynemartin@gmail.com:testtest";
             byte[] data = authorizationToEncode.getBytes("UTF-8");
             mKinveyAuthorization = Base64.encodeToString(data, Base64.NO_WRAP);
-            Log.d(TAG, "original: '"+authorizationToEncode+"'");
-            Log.d(TAG, "Base 64:  '"+mKinveyAuthorization+"'");
+            Log.d(TAG, "original: '" + authorizationToEncode + "'");
+            Log.d(TAG, "Base 64:  '" + mKinveyAuthorization + "'");
             mKinveyAuthorization = "Basic " + mKinveyAuthorization;
-            Log.d(TAG, "Authorization: '"+mKinveyAuthorization+"'");
+            Log.d(TAG, "Authorization: '" + mKinveyAuthorization + "'");
         } catch (UnsupportedEncodingException e) {
             Log.e(TAG, "Base64 encode exception: " + e.getMessage());
             Sentry.capture(e);
@@ -312,7 +312,8 @@ public class SensorService extends Service {
             }
 
             try {
-                // TODO: Write data to local DB / filestore
+                db.addRecord(new SensorSqlData(data.toString()));
+                Log.d(TAG, "Added record to SQLite DB");
             } catch (Exception e) {
                 Log.e(TAG, "Exception:" + e.getMessage());
                 sendMessageToActivity("Error saving: " + e.getMessage());
@@ -455,8 +456,6 @@ public class SensorService extends Service {
                     // create new SensorServiceData
                     PSDSData.SensorData data = new PSDSData.SensorData(event.sensor.getType(), event.timestamp, dataList);
                     sensorServiceDataList.add(data);
-                    db.addRecord(new SensorSqlData(data.toString()));
-                    Log.d(TAG, "added record to SQLite database...");
                 }
             }
         }
