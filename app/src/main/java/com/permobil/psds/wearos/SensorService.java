@@ -49,6 +49,9 @@ import java.util.Objects;
 
 import io.sentry.Sentry;
 import io.sentry.event.UserBuilder;
+import retrofit2.Retrofit;
+import retrofit2.adapter.rxjava2.RxJava2CallAdapterFactory;
+import retrofit2.converter.gson.GsonConverterFactory;
 
 public class SensorService extends Service {
 
@@ -88,6 +91,8 @@ public class SensorService extends Service {
     private Sensor mMotionDetect;
 
     private NetworkCallback mNetworkCallback;
+
+    private Retrofit retrofit;
 
     // activity detection
     public boolean personIsActive = false;
@@ -140,6 +145,13 @@ public class SensorService extends Service {
 
         mConnectivityManager = (ConnectivityManager) getApplicationContext().getSystemService(CONNECTIVITY_SERVICE);
         mNetworkCallback = new NetworkCallback();
+
+        // create the retrofit instance
+        retrofit = new Retrofit.Builder()
+                .baseUrl("https://baas.kinvey.com")
+                .addConverterFactory(GsonConverterFactory.create())
+                .addCallAdapterFactory(RxJava2CallAdapterFactory.create())
+                .build();
 
         Log.d(TAG, "providers: " + mLocationManager.getProviders(false));
 
