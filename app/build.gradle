@@ -24,11 +24,7 @@ configurations {
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     // KINVEY -------------------------------------------------------------------
-    implementation ':kinvey-android:+@aar'
     implementation ':relinker:+@aar'
-    implementation ':realm-android-library:+@aar'
-    annotationProcessor ':pubnub-gson-4.18.0-all'
-    annotationProcessor ':realm-annotations-processor-3.2.1'
     // --------------------------------------------------------------------------
     // SENTRY -----------------------------------------------------------------
     implementation 'io.sentry:sentry-android:1.7.21'
