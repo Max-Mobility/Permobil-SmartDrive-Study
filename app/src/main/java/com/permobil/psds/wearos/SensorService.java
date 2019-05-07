@@ -25,11 +25,9 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
 import android.os.Handler;
-import android.os.Message;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
-import android.provider.Telephony;
 import android.util.Base64;
 import android.util.Log;
 
@@ -248,6 +246,7 @@ public class SensorService extends Service {
                 PSDSData data = new PSDSData();
                 data.user_identifier = this.userIdentifier;
                 data.device_uuid = this.deviceUUID;
+
                 Call<PSDSData> call = mKinveyApiService.sendData(mKinveyAuthorization, data);
                 call.enqueue(new Callback<PSDSData>() {
                     @Override

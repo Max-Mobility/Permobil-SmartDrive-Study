@@ -1,39 +1,37 @@
 package com.permobil.psds.wearos;
 
-import android.hardware.Sensor;
 import android.os.Build;
 
-import com.google.api.client.json.GenericJson;
 import com.google.api.client.util.Key;
 
 import java.util.List;
 
-public class PSDSData extends GenericJson {
+public class PSDSData {
 
-    public static class SensorData extends GenericJson {
+    public static class SensorData {
         /**
          * Sensor type as int.
          */
-        @Key
+        @Key("s")
         public int s;
 
         /**
          * Sensor event timestamp.
          */
-        @Key
+        @Key("ts")
         public long ts;
 
         /**
          * Returns the seconds since Epoch
          */
-        @Key
+        @Key("t")
         public long t;
 
 
         /**
          * Hashmap for storing the sensor data.
          */
-        @Key
+        @Key("d")
         public List<Float> d;
 
         // anything extending GernericJson must have empty constructor
@@ -49,31 +47,29 @@ public class PSDSData extends GenericJson {
         }
     }
 
-    @Key
-    public List<Sensor> sensor_list;
-
-    @Key
+    @Key("sensor_data")
     public List<SensorData> sensor_data;
 
-    @Key
+
+    @Key("device_manufacturer")
     public String device_manufacturer;
 
-    @Key
+    @Key("device_model")
     public String device_model;
 
-    @Key
+    @Key("device_os_version")
     public String device_os_version;
 
-    @Key
+    @Key("device_sdk_version")
     public int device_sdk_version;
 
-    @Key
+    @Key("device_uuid")
     public String device_uuid;
 
-    @Key
+    @Key("user_identifier")
     public String user_identifier;
 
-    @Key
+    @Key("location")
     public PSDSLocation location;
 
     public PSDSData() {
