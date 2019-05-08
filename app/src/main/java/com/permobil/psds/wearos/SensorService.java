@@ -26,8 +26,6 @@ import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
 import android.os.Handler;
 import android.os.IBinder;
-import android.os.PowerManager;
-import android.os.PowerManager.WakeLock;
 import android.util.Base64;
 import android.util.Log;
 
@@ -69,7 +67,6 @@ public class SensorService extends Service {
     private Retrofit retrofit;
     private KinveyApiService mKinveyApiService;
     private String mKinveyAuthorization;
-    private WakeLock mWakeLock;
     private Handler mHandler;
     private Runnable mSendTask;
     private Runnable mSaveTask;
@@ -175,10 +172,6 @@ public class SensorService extends Service {
                 startServiceWithNotification();
 
                 Log.d(TAG, "starting service!");
-
-                // Handle wake_lock so data collection can continue even when screen turns off
-                // without wake_lock the service will stop bc the CPU gives up
-                this._handleWakeLockSetup();
 
                 boolean didRegisterSensors = this._registerDeviceSensors(sensorDelay, maxReportingLatency);
                 Log.d(TAG, "Did register Sensors: " + didRegisterSensors);
@@ -314,11 +307,6 @@ public class SensorService extends Service {
     public void onDestroy() {
         Log.d(TAG, "onDestroy()...");
         super.onDestroy();
-
-        if (this.mWakeLock != null) {
-            Log.d(TAG, "Releasing wakelock for SensorService.");
-            this.mWakeLock.release();
-        }
 
         // unregister network
         unregisterNetwork();
@@ -570,13 +558,6 @@ public class SensorService extends Service {
         }
 
         return true;
-    }
-
-    private void _handleWakeLockSetup() {
-        PowerManager mgr = (PowerManager) getApplicationContext().getSystemService(Context.POWER_SERVICE);
-        mWakeLock = mgr.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PermobilWear:SensorServiceWakeLock");
-        mWakeLock.acquire();
-        Log.d(TAG, "PermobilWear:SensorServiceWakeLock has been acquired.");
     }
 
     private void sendMessageToActivity(String msg) {
