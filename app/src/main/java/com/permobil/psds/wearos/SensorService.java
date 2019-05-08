@@ -19,11 +19,13 @@ import android.hardware.SensorManager;
 import android.hardware.TriggerEvent;
 import android.hardware.TriggerEventListener;
 import android.location.Location;
+import android.location.LocationListener;
 import android.location.LocationManager;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.PowerManager;
@@ -57,8 +59,10 @@ public class SensorService extends Service {
     private static final int sensorDelay = android.hardware.SensorManager.SENSOR_DELAY_UI;
     private static final int maxReportingLatency = 1000000; // 10 seconds between sensor updates
     // TODO: change these values for release
-    private static final int SAVE_TASK_PERIOD_MS = 10000;//1 * 60 * 1000;
-    private static final int SEND_TASK_PERIOD_MS = 1 * 60 * 1000;//30 * 60 * 1000;
+    private static final int SAVE_TASK_PERIOD_MS = 1 * 60 * 1000;
+    private static final int SEND_TASK_PERIOD_MS = 5 * 60 * 1000;
+    private static final long LOCATION_LISTENER_MIN_TIME_MS = 5 * 60 * 1000;
+    private static final float LOCATION_LISTENER_MIN_DISTANCE_M = 100;
 
     private String userIdentifier;
     private String deviceUUID;
@@ -73,7 +77,9 @@ public class SensorService extends Service {
     private Handler mHandler;
     private Runnable mSendTask;
     private Runnable mSaveTask;
+    private Location mLastKnownLocation;
     private LocationManager mLocationManager;
+    private LocationListener mLocationListener;
     private TriggerSensorListener mTriggerListener;
     private SensorEventListener mListener;
     private SensorManager mSensorManager;
@@ -132,9 +138,22 @@ public class SensorService extends Service {
 
         // Get the LocationManager so we can send last known location with the record when saving to Kinvey
         mLocationManager = (LocationManager) getApplicationContext().getSystemService(Context.LOCATION_SERVICE);
+        mLocationListener = new LocationListener();
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "Unable to get device location because LOCATION permission has not been granted.");
+        } else {
+            mLocationManager.requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER,
+                    LOCATION_LISTENER_MIN_TIME_MS,
+                    LOCATION_LISTENER_MIN_DISTANCE_M,
+                    mLocationListener
+            );
+        }
 
-        mConnectivityManager = (ConnectivityManager) getApplicationContext().getSystemService(CONNECTIVITY_SERVICE);
-        mNetworkCallback = new NetworkCallback();
+        Log.d(TAG, "gps provider enabled: " + mLocationManager.isProviderEnabled(LocationManager.GPS_PROVIDER));
+        Log.d(TAG, "network provider enabled: " + mLocationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER));
+        Log.d(TAG, "passive provider enabled: " + mLocationManager.isProviderEnabled(LocationManager.PASSIVE_PROVIDER));
+        Log.d(TAG, "providers: " + mLocationManager.getProviders(false));
 
         // create the retrofit instance
         retrofit = new Retrofit.Builder()
@@ -152,10 +171,9 @@ public class SensorService extends Service {
         mKinveyAuthorization = Base64.encodeToString(data, Base64.NO_WRAP);
         mKinveyAuthorization = "Basic " + mKinveyAuthorization;
 
-        Log.d(TAG, "providers: " + mLocationManager.getProviders(false));
-
         // Get the ConnectivityManager so we can turn on wifi before saving
         mConnectivityManager = (ConnectivityManager) this.getSystemService(Context.CONNECTIVITY_SERVICE);
+        mNetworkCallback = new NetworkCallback();
 
         isServiceRunning = false;
     }
@@ -277,6 +295,8 @@ public class SensorService extends Service {
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 Log.w(TAG, "Unable to get device location because LOCATION permission has not been granted.");
                 data.location = null;
+            } else if (mLastKnownLocation != null) {
+                data.location = new PSDSLocation(mLastKnownLocation.getLatitude(), mLastKnownLocation.getLongitude(), mLastKnownLocation.getTime());
             } else {
                 Location loc;
                 loc = mLocationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
@@ -295,8 +315,8 @@ public class SensorService extends Service {
                         }
                     }
                 }
-                Log.d(TAG, "Data location: " + data.location);
             }
+            Log.d(TAG, "Data location: " + data.location);
 
             try {
                 db.addRecord(data);
@@ -331,6 +351,29 @@ public class SensorService extends Service {
         mHandler.removeCallbacks(mSendTask);
 
         isServiceRunning = false;
+    }
+
+    private class LocationListener implements android.location.LocationListener {
+        @Override
+        public void onLocationChanged(Location location) {
+            Log.d(TAG, "Got location: " + location);
+            mLastKnownLocation = location;
+        }
+
+        @Override
+        public void onProviderDisabled(String provider) {
+            Log.d(TAG, "Provider disabled: " + provider);
+        }
+
+        @Override
+        public void onProviderEnabled(String provider) {
+            Log.d(TAG, "Provider enabled: " + provider);
+        }
+
+        @Override
+        public void onStatusChanged(String provider, int status, Bundle extras) {
+            Log.d(TAG, "onStatusChanged(): " + provider + " - " + status);
+        }
     }
 
     private class NetworkCallback extends ConnectivityManager.NetworkCallback {
