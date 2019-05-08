@@ -56,8 +56,9 @@ public class SensorService extends Service {
     private static final int NETWORK_CONNECTIVITY_TIMEOUT_MS = 60000;
     private static final int sensorDelay = android.hardware.SensorManager.SENSOR_DELAY_UI;
     private static final int maxReportingLatency = 1000000; // 10 seconds between sensor updates
-    private static final int SAVE_TASK_PERIOD_MS = 10000; //1 * 60 * 1000;
-    private static final int SEND_TASK_PERIOD_MS = 60 * 1000;
+    // TODO: change these values for release
+    private static final int SAVE_TASK_PERIOD_MS = 10000;//1 * 60 * 1000;
+    private static final int SEND_TASK_PERIOD_MS = 1 * 60 * 1000;//30 * 60 * 1000;
 
     private String userIdentifier;
     private String deviceUUID;
@@ -290,7 +291,12 @@ public class SensorService extends Service {
                     if (loc != null) {
                         data.location = new PSDSLocation(loc.getLatitude(), loc.getLongitude(), loc.getTime());
                     } else {
-                        data.location = null;
+                        loc = mLocationManager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER);
+                        if (loc != null) {
+                            data.location = new PSDSLocation(loc.getLatitude(), loc.getLongitude(), loc.getTime());
+                        } else {
+                            data.location = null;
+                        }
                     }
                 }
                 Log.d(TAG, "Data location: " + data.location);
@@ -417,8 +423,6 @@ public class SensorService extends Service {
         @Override
         public void onTrigger(TriggerEvent event) {
             if (event.sensor.getType() == Sensor.TYPE_SIGNIFICANT_MOTION) {
-                //Log.d(TAG, "Significant motion detected!");
-                //sendMessageToActivity("Significant Motion Detected!");
                 personIsActive = true;
                 if (isServiceRunning) {
                     mSensorManager.requestTriggerSensor(this, mSignificantMotion);
@@ -458,14 +462,14 @@ public class SensorService extends Service {
             }
             // check if the user is wearing the watch
             if (event.sensor.getType() == Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT) {
-                watchBeingWorn = (event.values[0] != 0.0); // 1.0 => device is on body, 0.0 => device is off body
-                //sendMessageToActivity("OFF_BODY Change: "+watchBeingWorn);
+                // 1.0 => device is on body, 0.0 => device is off body
+                watchBeingWorn = (event.values[0] != 0.0);
             }
         }
 
-        boolean hasBeenActive() {
+        public boolean hasBeenActive() {
             //Log.d(TAG, "PersonIsActive: " + personIsActive + "; watchBeingWorn: " + watchBeingWorn);
-            return true; //watchBeingWorn;
+            return watchBeingWorn;
         }
 
     }
