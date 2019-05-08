@@ -60,9 +60,12 @@ public class SensorDbHandler extends SQLiteOpenHelper {
         db.close();
     }
 
-    public List<PSDSData> getAllRecords() {
+    public List<PSDSData> getRecords(int numRecords) {
         List recordList = new ArrayList();
         String selectQuery = "SELECT * FROM " + TABLE_NAME + " ORDER BY " + KEY_ID + " DESC";
+        if (numRecords > 0) {
+            selectQuery += " LIMIT " + numRecords;
+        }
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(selectQuery, null);
         Gson gson = new Gson();

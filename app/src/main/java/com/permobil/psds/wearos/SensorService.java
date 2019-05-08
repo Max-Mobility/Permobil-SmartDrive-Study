@@ -228,7 +228,7 @@ public class SensorService extends Service {
             Log.d(TAG, "Pushing to kinvey: " + tableRowCount);
             sendMessageToActivity("Sending " + tableRowCount + " records to backend");
             try {
-                Observable.just(db.getAllRecords())
+                Observable.just(db.getRecords(10))
                         .flatMap(Observable::fromIterable)
                         .flatMap(x -> mKinveyApiService.sendData(mKinveyAuthorization, x))
                         .subscribeOn(Schedulers.io())
@@ -237,6 +237,7 @@ public class SensorService extends Service {
                         .subscribe(
                                 item -> {
                                     Log.d(TAG, "item sent: " + item.id);
+                                    numRecordsPushed++;
                                     db.deleteRecord(item.id);
                                 },
                                 error -> {
@@ -298,6 +299,7 @@ public class SensorService extends Service {
 
             try {
                 db.addRecord(data);
+                numRecordsSaved++;
             } catch (Exception e) {
                 Log.e(TAG, "Exception:" + e.getMessage());
                 sendMessageToActivity("Error saving: " + e.getMessage());
