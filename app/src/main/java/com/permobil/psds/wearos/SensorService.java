@@ -225,7 +225,7 @@ public class SensorService extends Service {
             _PurgeLocalData();
             unregisterNetwork();
         } else {
-            int pushCount = Math.min(tableRowCount, 10);
+            long pushCount = Math.min(tableRowCount, 10);
             Log.d(TAG, "Pushing to kinvey: " + pushCount);
             sendMessageToActivity("Sending " + pushCount + " records to backend");
             try {
@@ -237,9 +237,9 @@ public class SensorService extends Service {
                         .unsubscribeOn(Schedulers.io())
                         .subscribe(
                                 item -> {
-                                    Log.d(TAG, "item sent: " + item.id);
+                                    Log.d(TAG, "item sent: " + item._id);
                                     numRecordsPushed++;
-                                    db.deleteRecord(item.id);
+                                    db.deleteRecord(item._id);
                                 },
                                 error -> {
                                     Log.e(TAG, "send data onError(): " + error);
@@ -467,7 +467,7 @@ public class SensorService extends Service {
 
         public boolean hasBeenActive() {
             //Log.d(TAG, "PersonIsActive: " + personIsActive + "; watchBeingWorn: " + watchBeingWorn);
-            return true;//watchBeingWorn;
+            return watchBeingWorn;
         }
 
     }

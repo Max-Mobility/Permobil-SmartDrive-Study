@@ -49,7 +49,7 @@ public class PSDSData {
     }
 
     @Key("_id")
-    public String id;
+    public String _id;
 
     @Key("sensor_data")
     public List<SensorData> sensor_data;
@@ -77,7 +77,7 @@ public class PSDSData {
     public PSDSLocation location;
 
     public PSDSData() {
-        this.id = UUID.randomUUID().toString();
+        this._id = UUID.randomUUID().toString();
         this.device_manufacturer = Build.MANUFACTURER;
         this.device_model = Build.MODEL;
         this.device_os_version = Build.VERSION.RELEASE;
