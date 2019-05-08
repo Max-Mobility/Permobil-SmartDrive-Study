@@ -71,7 +71,12 @@ public class SensorDbHandler extends SQLiteOpenHelper {
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(selectQuery, null);
 
-        CursorWindow cw = new CursorWindow("getRecordsCursor", 4000000);
+        CursorWindow cw = null;
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            cw = new CursorWindow("getRecordsCursor", 4000000);
+        } else {
+            cw = new CursorWindow("getRecordsCursor");
+        }
         AbstractWindowedCursor ac = (AbstractWindowedCursor) cursor;
         ac.setWindow(cw);
 
