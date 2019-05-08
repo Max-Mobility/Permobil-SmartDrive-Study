@@ -6,8 +6,8 @@ android {
         applicationId "com.permobil.psds.wearos"
         minSdkVersion 26
         targetSdkVersion 28
-        versionCode 1
-        versionName "1.0"
+        versionCode 10001
+        versionName "0.1.0"
     }
     buildTypes {
         release {
