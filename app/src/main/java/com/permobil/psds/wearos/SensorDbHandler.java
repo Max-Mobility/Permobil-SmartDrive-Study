@@ -26,19 +26,15 @@ public class SensorDbHandler extends SQLiteOpenHelper {
     private static final String KEY_DATA = "data";
     private static final String KEY_DATA_ID = "uuid";
 
-    public boolean isBusy = false;
-
     public SensorDbHandler(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
     }
 
     @Override
     public void onCreate(SQLiteDatabase db) {
-        isBusy = true;
         String CREATE_TABLE_SENSORDATA = "CREATE TABLE " + TABLE_NAME + "(" + KEY_ID
                 + " INTEGER PRIMARY KEY AUTOINCREMENT," + KEY_DATA + " TEXT, " + KEY_DATA_ID + " TEXT)";
         db.execSQL(CREATE_TABLE_SENSORDATA);
-        isBusy = false;
     }
 
     @Override
@@ -51,7 +47,6 @@ public class SensorDbHandler extends SQLiteOpenHelper {
 
     // Insert values to the table
     public void addRecord(PSDSData data) {
-        isBusy = true;
         SQLiteDatabase db = this.getReadableDatabase();
         ContentValues values = new ContentValues();
 
@@ -63,11 +58,9 @@ public class SensorDbHandler extends SQLiteOpenHelper {
         values.put(KEY_DATA, dataAsJson);
         db.insert(TABLE_NAME, null, values);
         db.close();
-        isBusy = false;
     }
 
     public List<PSDSData> getAllRecords() {
-        isBusy = true;
         List recordList = new ArrayList();
         String selectQuery = "SELECT * FROM " + TABLE_NAME + " ORDER BY " + KEY_ID + " DESC";
         SQLiteDatabase db = this.getReadableDatabase();
@@ -88,28 +81,23 @@ public class SensorDbHandler extends SQLiteOpenHelper {
         }
 
         db.close();
-        isBusy = false;
         Log.d(TAG, "Returning SQLite RecordList with record count: " + recordList.size());
         return recordList;
     }
 
     public long getTableRowCount() {
-        isBusy = true;
         SQLiteDatabase db = this.getWritableDatabase();
         long count = DatabaseUtils.queryNumEntries(db, TABLE_NAME);
         Log.d(TAG, "Current SQLite Table Row Count: " + count);
         db.close();
-        isBusy = false;
         return count;
     }
 
     public void deleteRecord(String id) {
-        isBusy = true;
         SQLiteDatabase db = this.getWritableDatabase();
         db.delete(TABLE_NAME, KEY_DATA_ID + "=?", new String[]{id});
         Log.d(TAG, "Deleted record from database with id: " + id);
         db.close();
-        isBusy = false;
     }
 
     public void deleteDatabase_DO_YOU_KNOW_WHAT_YOU_ARE_DOING() {

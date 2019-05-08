@@ -218,7 +218,6 @@ public class SensorService extends Service {
 
     private void _PushDataToKinvey() {
         Log.d(TAG, "_PushDataToKinvey()...");
-        // TODO: determine if we need to send records
         // Check if the SQLite table has any records pending to be pushed
         long tableRowCount = db.getTableRowCount();
         if (tableRowCount == 0) {
@@ -229,10 +228,6 @@ public class SensorService extends Service {
             Log.d(TAG, "Pushing to kinvey: " + tableRowCount);
             sendMessageToActivity("Sending " + tableRowCount + " records to backend");
             try {
-                while (!db.isBusy) {
-                    Log.d(TAG, "Waiting to get records");
-                    Thread.sleep(100);
-                }
                 Observable.just(db.getAllRecords())
                         .flatMap(Observable::fromIterable)
                         .flatMap(x -> mKinveyApiService.sendData(mKinveyAuthorization, x))
@@ -243,7 +238,6 @@ public class SensorService extends Service {
                                 item -> {
                                     Log.d(TAG, "item sent: " + item.id);
                                     db.deleteRecord(item.id);
-                                    // TODO: remove item from array / DB
                                 },
                                 error -> {
                                     Log.e(TAG, "send data onError(): " + error);
@@ -252,7 +246,7 @@ public class SensorService extends Service {
                                 },
                                 () -> {
                                     Log.d(TAG, "onCompleted()");
-                                    // TODO: clear array / DB
+                                    sendMessageToActivity("Sent " + tableRowCount + " records to backend successfully.");
                                     unregisterNetwork();
                                 });
             } catch (Exception e) {
@@ -270,10 +264,6 @@ public class SensorService extends Service {
         if (sensorServiceDataList.isEmpty()) {
             Log.d(TAG, "Sensor data list is empty, so will not save/push this record.");
         } else {
-            if (db.isBusy) {
-                Log.d(TAG, "Not saving right now, db is busy");
-                return;
-            }
             PSDSData data = new PSDSData();
             data.user_identifier = this.userIdentifier;
             data.device_uuid = this.deviceUUID;
