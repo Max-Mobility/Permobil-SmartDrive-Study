@@ -315,8 +315,8 @@ public class SensorService extends Service {
                         }
                     }
                 }
-                Log.d(TAG, "Data location: " + data.location);
             }
+            Log.d(TAG, "Data location: " + data.location);
 
             try {
                 db.addRecord(data);
