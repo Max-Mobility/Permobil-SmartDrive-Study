@@ -1,9 +1,8 @@
 package com.permobil.psds.wearos;
 
-import com.google.api.client.json.GenericJson;
 import com.google.api.client.util.Key;
 
-public class PSDSLocation extends GenericJson {
+public class PSDSLocation {
     @Key
     public double latitude;
 

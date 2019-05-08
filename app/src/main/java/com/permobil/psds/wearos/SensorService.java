@@ -25,56 +25,58 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
 import android.os.Handler;
-import android.os.Message;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
+import android.util.Base64;
 import android.util.Log;
 
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat.Builder;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
-import com.kinvey.android.Client;
-import com.kinvey.android.callback.KinveyPurgeCallback;
-import com.kinvey.android.store.DataStore;
-import com.kinvey.android.sync.KinveyPushCallback;
-import com.kinvey.android.sync.KinveyPushResponse;
-import com.kinvey.java.KinveyException;
-import com.kinvey.java.core.KinveyClientCallback;
-import com.kinvey.java.store.StoreType;
-
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
+import io.reactivex.Observable;
+import io.reactivex.android.schedulers.AndroidSchedulers;
+import io.reactivex.schedulers.Schedulers;
 import io.sentry.Sentry;
 import io.sentry.event.UserBuilder;
+import retrofit2.Retrofit;
+import retrofit2.adapter.rxjava2.RxJava2CallAdapterFactory;
+import retrofit2.converter.gson.GsonConverterFactory;
 
 public class SensorService extends Service {
 
     private static final String TAG = "PermobilSensorService";
     private static final int NOTIFICATION_ID = 543;
-    private static final int MESSAGE_CONNECTIVITY_TIMEOUT = 1;
     private static final int NETWORK_CONNECTIVITY_TIMEOUT_MS = 60000;
     private static final int sensorDelay = android.hardware.SensorManager.SENSOR_DELAY_UI;
     private static final int maxReportingLatency = 1000000; // 10 seconds between sensor updates
-    private static final int KINVEY_TASK_PERIOD_MS = 1 * 60 * 1000;
+    // TODO: change these values for release
+    private static final int SAVE_TASK_PERIOD_MS = 10000;//1 * 60 * 1000;
+    private static final int SEND_TASK_PERIOD_MS = 1 * 60 * 1000;//30 * 60 * 1000;
 
+    private String userIdentifier;
+    private String deviceUUID;
+    private SensorDbHandler db;
     private Builder notificationBuilder;
     private NotificationManager notificationManager;
     private Notification notification;
-    private DataStore<PSDSData> psdsDataStore;
-    private Handler mHandler;
+    private Retrofit retrofit;
+    private KinveyApiService mKinveyApiService;
+    private String mKinveyAuthorization;
     private WakeLock mWakeLock;
-    private String userIdentifier;
-    private String deviceUUID;
+    private Handler mHandler;
+    private Runnable mSendTask;
+    private Runnable mSaveTask;
     private LocationManager mLocationManager;
-    private Runnable mKinveyTask;
     private TriggerSensorListener mTriggerListener;
     private SensorEventListener mListener;
     private SensorManager mSensorManager;
-    private ConnectivityManager mConnectivityManager;
-
     private Sensor mSignificantMotion;
     private Sensor mLinearAcceleration;
     private Sensor mGravity;
@@ -86,21 +88,19 @@ public class SensorService extends Service {
     private Sensor mOffBodyDetect;
     private Sensor mStationaryDetect;
     private Sensor mMotionDetect;
-
+    private ConnectivityManager mConnectivityManager;
     private NetworkCallback mNetworkCallback;
 
     // activity detection
     public boolean personIsActive = false;
     public boolean watchBeingWorn = false;
+    public boolean isServiceRunning = false;
 
     public long numRecordsPushed = 0;
     public long numRecordsSaved = 0;
-    public PushCallback mPushCallback;
-    public SaveCallback mSaveCallback;
-    public PurgeCallback mPurgeCallback;
 
-    public boolean isServiceRunning = false;
     public ArrayList<PSDSData.SensorData> sensorServiceDataList = new ArrayList<>();
+    public List<PSDSData> dataList = new ArrayList<>();
 
     public SensorService() {
     }
@@ -117,20 +117,15 @@ public class SensorService extends Service {
         Log.d(TAG, "SensorService onCreate...");
         startServiceWithNotification();
 
+        Log.d(TAG, "Create sensor SQLite database...");
+        db = new SensorDbHandler(getApplicationContext());
+        Log.d(TAG, "SQLite DB created: " + db);
+
         @SuppressLint("HardwareIds")
         String uuid = android.provider.Settings.Secure.getString(getContentResolver(),
                 android.provider.Settings.Secure.ANDROID_ID);
         this.deviceUUID = uuid;
         this.mHandler = new Handler();
-
-        this.mSaveCallback = new SaveCallback<PSDSData>();
-        this.mPushCallback = new PushCallback();
-        this.mPurgeCallback = new PurgeCallback();
-
-        Client mKinveyClient = ((App) getApplication()).getSharedClient();
-
-        // Get the Kinvey Data Collection for storing data
-        this.psdsDataStore = DataStore.collection("PSDSData", PSDSData.class, StoreType.SYNC, mKinveyClient);
 
         // clear the datastore (from previous app runs)
         _PurgeLocalData();
@@ -140,6 +135,22 @@ public class SensorService extends Service {
 
         mConnectivityManager = (ConnectivityManager) getApplicationContext().getSystemService(CONNECTIVITY_SERVICE);
         mNetworkCallback = new NetworkCallback();
+
+        // create the retrofit instance
+        retrofit = new Retrofit.Builder()
+                .baseUrl(Constants.API_BASE)
+                .addConverterFactory(GsonConverterFactory.create())
+                .addCallAdapterFactory(RxJava2CallAdapterFactory.create())
+                .build();
+
+        // create an instance of the KinveyApiService
+        mKinveyApiService = retrofit.create(KinveyApiService.class);
+
+        // save the authorization string needed for kinvey
+        String authorizationToEncode = "bradwaynemartin@gmail.com:testtest";
+        byte[] data = authorizationToEncode.getBytes(StandardCharsets.UTF_8);
+        mKinveyAuthorization = Base64.encodeToString(data, Base64.NO_WRAP);
+        mKinveyAuthorization = "Basic " + mKinveyAuthorization;
 
         Log.d(TAG, "providers: " + mLocationManager.getProviders(false));
 
@@ -172,16 +183,18 @@ public class SensorService extends Service {
                 boolean didRegisterSensors = this._registerDeviceSensors(sensorDelay, maxReportingLatency);
                 Log.d(TAG, "Did register Sensors: " + didRegisterSensors);
 
-
-                mKinveyTask = new Runnable() {
-                    @Override
-                    public void run() {
-                        _RequestNetworkAndSend();
-                        mHandler.postDelayed(mKinveyTask, KINVEY_TASK_PERIOD_MS); // save every 10 minutes
-                    }
+                mSaveTask = () -> {
+                    _SaveData();
+                    mHandler.postDelayed(mSaveTask, SAVE_TASK_PERIOD_MS);
                 };
 
-                mKinveyTask.run();
+                mSendTask = () -> {
+                    _RequestNetworkAndSend();
+                    mHandler.postDelayed(mSendTask, SEND_TASK_PERIOD_MS);
+                };
+
+                mSaveTask.run();
+                mSendTask.run();
             } else {
                 stopMyService();
             }
@@ -194,107 +207,64 @@ public class SensorService extends Service {
     private void _PurgeLocalData() {
         Log.d(TAG, "_PurgeLocalData()");
         try {
-            long numToSend = psdsDataStore.syncCount();
-            Log.d(TAG, "Purging " + numToSend + " records from the DB");
-            psdsDataStore.clear(); // we have nothing unsent, clear the storage
-            psdsDataStore.purge(this.mPurgeCallback);
-        } catch (KinveyException ke) {
-            Log.e(TAG, "Error purging kinvey database" + ke.getReason());
-            sendMessageToActivity("Error trying to purge database: " + ke.getExplanation());
-            Sentry.capture(ke);
+            // TODO: clear local file system
+            Log.d(TAG, "Do we want to clear the entire SQLite DB here? Or should we just let it grow and only delete once a record has been sent to Kinvey successfully???");
+        } catch (Exception e) {
+            Log.e(TAG, "Error purging local data" + e.getMessage());
+            sendMessageToActivity("Error trying to purge local data: " + e.getMessage());
+            Sentry.capture(e);
         }
     }
 
     private void _PushDataToKinvey() {
         Log.d(TAG, "_PushDataToKinvey()...");
-        long numToSend = psdsDataStore.syncCount();
-        if (numToSend == 0) {
+        // Check if the SQLite table has any records pending to be pushed
+        long tableRowCount = db.getTableRowCount();
+        if (tableRowCount == 0) {
             Log.d(TAG, "No unsent data, clearing the storage.");
             _PurgeLocalData();
             unregisterNetwork();
         } else {
-            Log.d(TAG, "Pushing to kinvey: " + numToSend);
-            sendMessageToActivity("Sending " + numToSend + " records to backend");
+            long pushCount = Math.min(tableRowCount, 10);
+            Log.d(TAG, "Pushing to kinvey: " + pushCount);
+            sendMessageToActivity("Sending " + pushCount + " records to backend");
             try {
-                psdsDataStore.push(this.mPushCallback);
-            } catch (KinveyException ke) {
-                Log.e(TAG, "Error pushing kinvey record for sensor data. " + ke.getReason());
-                sendMessageToActivity("Error trying to push data to backend: " + ke.getExplanation());
-                Sentry.capture(ke);
-                unregisterNetwork();
+                Observable.just(db.getRecords(10))
+                        .flatMap(Observable::fromIterable)
+                        .flatMap(x -> mKinveyApiService.sendData(mKinveyAuthorization, x))
+                        .subscribeOn(Schedulers.io())
+                        .observeOn(AndroidSchedulers.mainThread())
+                        .unsubscribeOn(Schedulers.io())
+                        .subscribe(
+                                item -> {
+                                    Log.d(TAG, "item sent: " + item._id);
+                                    numRecordsPushed++;
+                                    db.deleteRecord(item._id);
+                                },
+                                error -> {
+                                    Log.e(TAG, "send data onError(): " + error);
+                                    Sentry.capture(error);
+                                    unregisterNetwork();
+                                },
+                                () -> {
+                                    Log.d(TAG, "onCompleted()");
+                                    sendMessageToActivity("Sent " + pushCount + " records to backend successfully.");
+                                    unregisterNetwork();
+                                });
             } catch (Exception e) {
-                Log.e(TAG, "Exception:" + e.getMessage());
-                sendMessageToActivity("Error pushing: " + e.getMessage());
+                Log.e(TAG, "Exception pushing to kinvey:" + e.getMessage());
+                sendMessageToActivity("Error sending to database: " + e.getMessage());
                 Sentry.capture(e);
                 unregisterNetwork();
             }
         }
     }
 
-    private class PurgeCallback implements KinveyPurgeCallback {
-        @Override
-        public void onSuccess(Void aVoid) {
-            Log.d(TAG, "purged datastore");
-        }
-
-        @Override
-        public void onFailure(Throwable throwable) {
-            Log.e(TAG, "Kinvey purge failure message" + ": " + throwable.getMessage());
-            Log.e(TAG, "Kinvey purge failure cause: " + throwable.getCause());
-            sendMessageToActivity(throwable.getMessage());
-            Sentry.capture(throwable);
-        }
-
-    }
-
-    private class PushCallback implements KinveyPushCallback {
-        @Override
-        public void onSuccess(KinveyPushResponse kinveyPushResponse) {
-            int successCount = kinveyPushResponse.getSuccessCount();
-            Log.d(TAG, "Data pushed to Kinvey successfully. Success Count = " + successCount);
-            sendMessageToActivity("Data service synced " + successCount + " records to backend successfully.");
-            unregisterNetwork();
-        }
-
-        @Override
-        public void onFailure(Throwable throwable) {
-            Log.e(TAG, "Kinvey push failure message" + ": " + throwable.getMessage());
-            Log.e(TAG, "Kinvey push failure cause: " + throwable.getCause());
-            sendMessageToActivity(throwable.getMessage());
-            Sentry.capture(throwable);
-            unregisterNetwork();
-        }
-
-        @Override
-        public void onProgress(long current, long all) {
-            Log.d(TAG, "Kinvey push progress: " + current + " / " + all);
-            sendMessageToActivity("Sent " + current + " / " + all + " records to backend");
-        }
-    }
-
-    private class SaveCallback<T> implements KinveyClientCallback<T> {
-        @Override
-        public void onSuccess(T result) {
-            // Push data to Kinvey backend.
-            _PushDataToKinvey();
-        }
-
-        @Override
-        public void onFailure(Throwable throwable) {
-            Log.e(TAG, "Kinvey SAVE() Failure: " + throwable.getMessage());
-            sendMessageToActivity("Error saving data: " + throwable.getMessage());
-            Sentry.capture(throwable);
-            unregisterNetwork();
-        }
-
-    }
-
-    private void _SaveDataToKinvey() {
-        Log.d(TAG, "_SaveDataToKinvey()...");
+    private void _SaveData() {
+        Log.d(TAG, "_SaveData()...");
         // adding an empty check to avoid pushing the initial service starting records with no sensor_data since the intervals haven't clocked at that time
         if (sensorServiceDataList.isEmpty()) {
             Log.d(TAG, "Sensor data list is empty, so will not save/push this record.");
-            _PushDataToKinvey();
         } else {
             PSDSData data = new PSDSData();
             data.user_identifier = this.userIdentifier;
@@ -317,20 +287,20 @@ public class SensorService extends Service {
                     if (loc != null) {
                         data.location = new PSDSLocation(loc.getLatitude(), loc.getLongitude(), loc.getTime());
                     } else {
-                        data.location = null;
+                        loc = mLocationManager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER);
+                        if (loc != null) {
+                            data.location = new PSDSLocation(loc.getLatitude(), loc.getLongitude(), loc.getTime());
+                        } else {
+                            data.location = null;
+                        }
                     }
                 }
                 Log.d(TAG, "Data location: " + data.location);
             }
 
             try {
-                psdsDataStore.save(data, this.mSaveCallback);
-
-            } catch (KinveyException ke) {
-                Log.e(TAG, "Error saving kinvey record for sensor data. " + ke.getReason());
-                sendMessageToActivity("Error trying to save data to backend: " + ke.getExplanation());
-                Sentry.capture(ke);
-                unregisterNetwork();
+                db.addRecord(data);
+                numRecordsSaved++;
             } catch (Exception e) {
                 Log.e(TAG, "Exception:" + e.getMessage());
                 sendMessageToActivity("Error saving: " + e.getMessage());
@@ -357,13 +327,14 @@ public class SensorService extends Service {
         _unregisterDeviceSensors();
 
         // remove handler tasks
-        mHandler.removeCallbacks(mKinveyTask);
+        mHandler.removeCallbacks(mSaveTask);
+        mHandler.removeCallbacks(mSendTask);
 
         isServiceRunning = false;
     }
 
     private class NetworkCallback extends ConnectivityManager.NetworkCallback {
-        public boolean isRegistered = false;
+        boolean isRegistered = false;
 
         @Override
         public void onAvailable(Network network) {
@@ -373,8 +344,8 @@ public class SensorService extends Service {
                     if (capabilities != null) {
                         int bandwidth = capabilities.getLinkDownstreamBandwidthKbps();
                         Log.d(TAG, "Bandwidth for network: " + bandwidth);
-                        // we can use this network
-                        _SaveDataToKinvey();
+                        // we can use this network, so push to remote
+                        _PushDataToKinvey();
                     } else {
                         Log.d(TAG, "No capabilities for network!");
                         unregisterNetwork();
@@ -386,6 +357,7 @@ public class SensorService extends Service {
                 }
             } catch (IllegalStateException e) {
                 Log.e(TAG, "ConnectivityManager.NetworkCallback.onAvailable: ", e);
+                Sentry.capture(e);
                 unregisterNetwork();
             }
         }
@@ -424,11 +396,11 @@ public class SensorService extends Service {
         }
         NetworkRequest.Builder request = new NetworkRequest.Builder();
         // add capabilities
-        for (int cap: capabilities) {
+        for (int cap : capabilities) {
             request.addCapability(cap);
         }
         // add transport types
-        for (int trans: transportTypes) {
+        for (int trans : transportTypes) {
             request.addTransportType(trans);
         }
         this.mNetworkCallback.isRegistered = true;
@@ -437,10 +409,10 @@ public class SensorService extends Service {
 
     public void _RequestNetworkAndSend() {
         // Add any NetworkCapabilities.NET_CAPABILITY_
-        int[] capabilities = new int[]{ NetworkCapabilities.NET_CAPABILITY_INTERNET, NetworkCapabilities.NET_CAPABILITY_NOT_METERED };
+        int[] capabilities = new int[]{NetworkCapabilities.NET_CAPABILITY_INTERNET, NetworkCapabilities.NET_CAPABILITY_NOT_METERED};
 
         // Add any NetworkCapabilities.TRANSPORT_
-        int[] transportTypes = new int[]{ NetworkCapabilities.TRANSPORT_WIFI };
+        int[] transportTypes = new int[]{NetworkCapabilities.TRANSPORT_WIFI};
 
         requestNetwork(capabilities, transportTypes);
     }
@@ -449,8 +421,6 @@ public class SensorService extends Service {
         @Override
         public void onTrigger(TriggerEvent event) {
             if (event.sensor.getType() == Sensor.TYPE_SIGNIFICANT_MOTION) {
-                //Log.d(TAG, "Significant motion detected!");
-                //sendMessageToActivity("Significant Motion Detected!");
                 personIsActive = true;
                 if (isServiceRunning) {
                     mSensorManager.requestTriggerSensor(this, mSignificantMotion);
@@ -481,7 +451,7 @@ public class SensorService extends Service {
             // TODO Auto-generated method stub
         }
 
-        public void updateActivity(SensorEvent event) {
+        void updateActivity(SensorEvent event) {
             // check if the watch is moving
             if (event.sensor.getType() == Sensor.TYPE_MOTION_DETECT) {
                 personIsActive = true;
@@ -490,8 +460,8 @@ public class SensorService extends Service {
             }
             // check if the user is wearing the watch
             if (event.sensor.getType() == Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT) {
-                watchBeingWorn = (event.values[0] != 0.0); // 1.0 => device is on body, 0.0 => device is off body
-                //sendMessageToActivity("OFF_BODY Change: "+watchBeingWorn);
+                // 1.0 => device is on body, 0.0 => device is off body
+                watchBeingWorn = (event.values[0] != 0.0);
             }
         }
 
