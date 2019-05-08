@@ -5,6 +5,7 @@ import android.os.Build;
 import com.google.api.client.util.Key;
 
 import java.util.List;
+import java.util.UUID;
 
 public class PSDSData {
 
@@ -47,6 +48,9 @@ public class PSDSData {
         }
     }
 
+    @Key("_id")
+    public String id;
+
     @Key("sensor_data")
     public List<SensorData> sensor_data;
 
@@ -73,6 +77,7 @@ public class PSDSData {
     public PSDSLocation location;
 
     public PSDSData() {
+        this.id = UUID.randomUUID().toString();
         this.device_manufacturer = Build.MANUFACTURER;
         this.device_model = Build.MODEL;
         this.device_os_version = Build.VERSION.RELEASE;
