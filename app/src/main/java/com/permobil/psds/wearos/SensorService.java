@@ -324,7 +324,7 @@ public class SensorService extends Service {
             }
 
             try {
-                db.addRecord(new SensorSqlData(data.toString()));
+                db.addRecord(data);
                 Log.d(TAG, "Added record to SQLite DB");
                 // TODO: This is just for testing
                 dataList.add(data);

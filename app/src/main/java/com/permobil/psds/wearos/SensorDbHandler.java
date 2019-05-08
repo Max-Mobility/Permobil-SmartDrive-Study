@@ -7,7 +7,10 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.util.Log;
 
+import com.google.gson.Gson;
+
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class SensorDbHandler extends SQLiteOpenHelper {
@@ -45,11 +48,11 @@ public class SensorDbHandler extends SQLiteOpenHelper {
     }
 
     // Insert values to the table sensordata
-    public void addRecord(SensorSqlData contact) {
+    public void addRecord(PSDSData data) {
         SQLiteDatabase db = this.getReadableDatabase();
         ContentValues values = new ContentValues();
 
-        values.put(KEY_DATA, contact.getData());
+        values.put(KEY_DATA, data.toString());
         db.insert(TABLE_SENSORDATA, null, values);
         db.close();
     }
@@ -59,21 +62,23 @@ public class SensorDbHandler extends SQLiteOpenHelper {
         String selectQuery = "SELECT * FROM " + TABLE_SENSORDATA + " ORDER BY " + KEY_ID + " DESC";
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(selectQuery, null);
+        Log.d(TAG, "cursor: " + Arrays.toString(cursor.getColumnNames()));
 
         // if TABLE has rows
         if (cursor.moveToFirst()) {
             // Loop through the table rows
             do {
-                Log.d(TAG, "cursor is iterating the sql select statement...");
-                SensorSqlData record = new SensorSqlData();
-                record.setData(cursor.getString(1));
-
-                Log.d(TAG, "record created with cursor data...");
+                Gson gson = new Gson();
+                String s = cursor.getString(1);
+                Log.d(TAG, "s: " + s);
+                PSDSData record = gson.fromJson(cursor.getString(1), PSDSData.class);
+                Log.d(TAG, "cursor record: " + record.sensor_data);
                 // Add record to list
                 recordList.add(record);
 
             } while (cursor.moveToNext());
         }
+
         db.close();
         Log.d(TAG, "Returning the list of records from sqlite db");
         return recordList;
