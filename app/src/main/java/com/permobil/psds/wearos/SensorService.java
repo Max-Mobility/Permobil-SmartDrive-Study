@@ -59,9 +59,9 @@ public class SensorService extends Service {
     private static final int sensorDelay = android.hardware.SensorManager.SENSOR_DELAY_UI;
     private static final int maxReportingLatency = 1000000; // 10 seconds between sensor updates
     // TODO: change these values for release
-    private static final int SAVE_TASK_PERIOD_MS = 10000;//1 * 60 * 1000;
-    private static final int SEND_TASK_PERIOD_MS = 1 * 60 * 1000;//30 * 60 * 1000;
-    private static final long LOCATION_LISTENER_MIN_TIME_MS = 1 * 60 * 1000;
+    private static final int SAVE_TASK_PERIOD_MS = 1 * 60 * 1000;
+    private static final int SEND_TASK_PERIOD_MS = 5 * 60 * 1000;
+    private static final long LOCATION_LISTENER_MIN_TIME_MS = 5 * 60 * 1000;
     private static final float LOCATION_LISTENER_MIN_DISTANCE_M = 100;
 
     private String userIdentifier;
@@ -510,7 +510,7 @@ public class SensorService extends Service {
 
         public boolean hasBeenActive() {
             //Log.d(TAG, "PersonIsActive: " + personIsActive + "; watchBeingWorn: " + watchBeingWorn);
-            return true;//watchBeingWorn;
+            return watchBeingWorn;
         }
 
     }
