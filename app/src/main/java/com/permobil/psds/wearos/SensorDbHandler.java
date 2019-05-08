@@ -2,7 +2,9 @@ package com.permobil.psds.wearos;
 
 import android.content.ContentValues;
 import android.content.Context;
+import android.database.AbstractWindowedCursor;
 import android.database.Cursor;
+import android.database.CursorWindow;
 import android.database.DatabaseUtils;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
@@ -68,6 +70,11 @@ public class SensorDbHandler extends SQLiteOpenHelper {
         }
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(selectQuery, null);
+
+        CursorWindow cw = new CursorWindow("getRecordsCursor", 4000000);
+        AbstractWindowedCursor ac = (AbstractWindowedCursor) cursor;
+        ac.setWindow(cw);
+
         Gson gson = new Gson();
 
         // if TABLE has rows
@@ -83,6 +90,7 @@ public class SensorDbHandler extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
 
+        cursor.close();
         db.close();
         Log.d(TAG, "Returning SQLite RecordList with record count: " + recordList.size());
         return recordList;
