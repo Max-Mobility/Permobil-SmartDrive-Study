@@ -52,7 +52,7 @@ public class SensorDbHandler extends SQLiteOpenHelper {
 
         Gson gson = new Gson();
         String dataAsJson = gson.toJson(data);
-        Log.d(TAG, "Saving new RECORD to SQL Table: " + dataAsJson);
+        Log.d(TAG, "Saving new RECORD to SQL Table: " + data.id);
 
         values.put(KEY_DATA_ID, data.id);
         values.put(KEY_DATA, dataAsJson);

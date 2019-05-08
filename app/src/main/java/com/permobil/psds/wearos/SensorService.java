@@ -225,8 +225,9 @@ public class SensorService extends Service {
             _PurgeLocalData();
             unregisterNetwork();
         } else {
-            Log.d(TAG, "Pushing to kinvey: " + tableRowCount);
-            sendMessageToActivity("Sending " + tableRowCount + " records to backend");
+            int pushCount = Math.min(tableRowCount, 10);
+            Log.d(TAG, "Pushing to kinvey: " + pushCount);
+            sendMessageToActivity("Sending " + pushCount + " records to backend");
             try {
                 Observable.just(db.getRecords(10))
                         .flatMap(Observable::fromIterable)
@@ -247,7 +248,7 @@ public class SensorService extends Service {
                                 },
                                 () -> {
                                     Log.d(TAG, "onCompleted()");
-                                    sendMessageToActivity("Sent " + tableRowCount + " records to backend successfully.");
+                                    sendMessageToActivity("Sent " + pushCount + " records to backend successfully.");
                                     unregisterNetwork();
                                 });
             } catch (Exception e) {
