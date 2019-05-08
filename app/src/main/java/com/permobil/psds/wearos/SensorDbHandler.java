@@ -24,6 +24,9 @@ public class SensorDbHandler extends SQLiteOpenHelper {
     // Table Columns names
     private static final String KEY_ID = "id";
     private static final String KEY_DATA = "data";
+    private static final String KEY_DATA_ID = "uuid";
+
+    public boolean isBusy = false;
 
     public SensorDbHandler(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
@@ -31,9 +34,11 @@ public class SensorDbHandler extends SQLiteOpenHelper {
 
     @Override
     public void onCreate(SQLiteDatabase db) {
+        isBusy = true;
         String CREATE_TABLE_SENSORDATA = "CREATE TABLE " + TABLE_NAME + "(" + KEY_ID
-                + " INTEGER PRIMARY KEY AUTOINCREMENT," + KEY_DATA + " TEXT)";
+                + " INTEGER PRIMARY KEY AUTOINCREMENT," + KEY_DATA + " TEXT, " + KEY_DATA_ID + " TEXT)";
         db.execSQL(CREATE_TABLE_SENSORDATA);
+        isBusy = false;
     }
 
     @Override
@@ -46,6 +51,7 @@ public class SensorDbHandler extends SQLiteOpenHelper {
 
     // Insert values to the table
     public void addRecord(PSDSData data) {
+        isBusy = true;
         SQLiteDatabase db = this.getReadableDatabase();
         ContentValues values = new ContentValues();
 
@@ -53,12 +59,15 @@ public class SensorDbHandler extends SQLiteOpenHelper {
         String dataAsJson = gson.toJson(data);
         Log.d(TAG, "Saving new RECORD to SQL Table: " + dataAsJson);
 
+        values.put(KEY_DATA_ID, data.id);
         values.put(KEY_DATA, dataAsJson);
         db.insert(TABLE_NAME, null, values);
         db.close();
+        isBusy = false;
     }
 
-    public List<SqlRowResult> getAllRecords() {
+    public List<PSDSData> getAllRecords() {
+        isBusy = true;
         List recordList = new ArrayList();
         String selectQuery = "SELECT * FROM " + TABLE_NAME + " ORDER BY " + KEY_ID + " DESC";
         SQLiteDatabase db = this.getReadableDatabase();
@@ -69,33 +78,38 @@ public class SensorDbHandler extends SQLiteOpenHelper {
         if (cursor.moveToFirst()) {
             // Loop through the table rows
             do {
+                int index = cursor.getInt(0);
                 PSDSData record = gson.fromJson(cursor.getString(1), PSDSData.class);
-                Log.d(TAG, "record id: " + cursor.getInt(0));
-
-                SqlRowResult result = new SqlRowResult(cursor.getInt(0), record);
+                String uuid = cursor.getString(2);
+                Log.d(TAG, "record id: " + index + " - " + uuid);
                 // Add record to list
-                recordList.add(result);
+                recordList.add(record);
             } while (cursor.moveToNext());
         }
 
         db.close();
+        isBusy = false;
         Log.d(TAG, "Returning SQLite RecordList with record count: " + recordList.size());
         return recordList;
     }
 
     public long getTableRowCount() {
+        isBusy = true;
         SQLiteDatabase db = this.getWritableDatabase();
         long count = DatabaseUtils.queryNumEntries(db, TABLE_NAME);
         Log.d(TAG, "Current SQLite Table Row Count: " + count);
         db.close();
+        isBusy = false;
         return count;
     }
 
     public void deleteRecord(String id) {
+        isBusy = true;
         SQLiteDatabase db = this.getWritableDatabase();
-        db.delete(TABLE_NAME, KEY_ID + "=?", new String[]{String.valueOf(id)});
+        db.delete(TABLE_NAME, KEY_DATA_ID + "=?", new String[]{id});
         Log.d(TAG, "Deleted record from database with id: " + id);
         db.close();
+        isBusy = false;
     }
 
     public void deleteDatabase_DO_YOU_KNOW_WHAT_YOU_ARE_DOING() {
@@ -103,28 +117,5 @@ public class SensorDbHandler extends SQLiteOpenHelper {
         db.delete(DATABASE_NAME, null, null);
         Log.d(TAG, "Deleting entire database.");
         db.close();
-    }
-
-
-    // class to describe the shape of the record with id so we can use the ID in the service when iterating the records to perform deletes from the service
-    public class SqlRowResult {
-        public int id;
-        public PSDSData data;
-
-        public SqlRowResult() {
-        }
-
-        public SqlRowResult(int id, PSDSData data) {
-            this.id = id;
-            this.data = data;
-        }
-
-        public PSDSData getPSDSData() {
-            return this.data;
-        }
-
-        public int getId() {
-            return this.id;
-        }
     }
 }

@@ -150,10 +150,8 @@ public class SensorService extends Service {
         String authorizationToEncode = "bradwaynemartin@gmail.com:testtest";
         byte[] data = authorizationToEncode.getBytes(StandardCharsets.UTF_8);
         mKinveyAuthorization = Base64.encodeToString(data, Base64.NO_WRAP);
-        Log.d(TAG, "original: '" + authorizationToEncode + "'");
-        Log.d(TAG, "Base 64:  '" + mKinveyAuthorization + "'");
         mKinveyAuthorization = "Basic " + mKinveyAuthorization;
-        Log.d(TAG, "Authorization: '" + mKinveyAuthorization + "'");
+
         Log.d(TAG, "providers: " + mLocationManager.getProviders(false));
 
         // Get the ConnectivityManager so we can turn on wifi before saving
@@ -231,22 +229,28 @@ public class SensorService extends Service {
             Log.d(TAG, "Pushing to kinvey: " + tableRowCount);
             sendMessageToActivity("Sending " + tableRowCount + " records to backend");
             try {
-                List<SensorDbHandler.SqlRowResult> allRecords = db.getAllRecords();
-                Log.d(TAG, "first record id: " + allRecords.get(0).id);
-
-                Observable.just(allRecords)
+                while (!db.isBusy) {
+                    Log.d(TAG, "Waiting to get records");
+                    Thread.sleep(10);
+                }
+                Observable.just(db.getAllRecords())
                         .flatMap(Observable::fromIterable)
-                        .flatMap(x -> mKinveyApiService.sendData(mKinveyAuthorization, x.data))
+                        .flatMap(x -> mKinveyApiService.sendData(mKinveyAuthorization, x))
                         .subscribeOn(Schedulers.io())
                         .observeOn(AndroidSchedulers.mainThread())
                         .unsubscribeOn(Schedulers.io())
-                        .subscribe(item -> {
-                                    Log.d(TAG, "item sent: " + item.data + " " + item.getId());
-                                    db.deleteRecord(String.valueOf(item.id));
+                        .subscribe(
+                                item -> {
+                                    Log.d(TAG, "item sent: " + item.id);
+                                    while (!db.isBusy) {
+                                        Log.d(TAG, "Waiting to delete");
+                                        Thread.sleep(10);
+                                    }
+                                    db.deleteRecord(item.id);
                                     // TODO: remove item from array / DB
                                 },
                                 error -> {
-                                    Log.e(TAG, "error: " + error);
+                                    Log.e(TAG, "send data onError(): " + error);
                                     Sentry.capture(error);
                                     unregisterNetwork();
                                 },
@@ -270,6 +274,10 @@ public class SensorService extends Service {
         if (sensorServiceDataList.isEmpty()) {
             Log.d(TAG, "Sensor data list is empty, so will not save/push this record.");
         } else {
+            if (db.isBusy) {
+                Log.d(TAG, "Not saving right now, db is busy");
+                return;
+            }
             PSDSData data = new PSDSData();
             data.user_identifier = this.userIdentifier;
             data.device_uuid = this.deviceUUID;
@@ -360,6 +368,7 @@ public class SensorService extends Service {
                 }
             } catch (IllegalStateException e) {
                 Log.e(TAG, "ConnectivityManager.NetworkCallback.onAvailable: ", e);
+                Sentry.capture(e);
                 unregisterNetwork();
             }
         }
@@ -469,7 +478,7 @@ public class SensorService extends Service {
 
         public boolean hasBeenActive() {
             //Log.d(TAG, "PersonIsActive: " + personIsActive + "; watchBeingWorn: " + watchBeingWorn);
-            return watchBeingWorn;
+            return true;//watchBeingWorn;
         }
 
     }

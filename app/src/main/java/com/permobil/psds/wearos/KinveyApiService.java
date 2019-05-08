@@ -12,5 +12,5 @@ public interface KinveyApiService {
             "Content-Type:application/json"
     })
     @POST(Constants.API_DATA_ENDPOINT)
-    Observable<SensorDbHandler.SqlRowResult> sendData(@Header("Authorization") String authorization, @Body PSDSData data);
+    Observable<PSDSData> sendData(@Header("Authorization") String authorization, @Body PSDSData data);
 }
