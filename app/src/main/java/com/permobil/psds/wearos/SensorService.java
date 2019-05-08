@@ -231,7 +231,7 @@ public class SensorService extends Service {
             try {
                 while (!db.isBusy) {
                     Log.d(TAG, "Waiting to get records");
-                    Thread.sleep(10);
+                    Thread.sleep(100);
                 }
                 Observable.just(db.getAllRecords())
                         .flatMap(Observable::fromIterable)
@@ -242,10 +242,6 @@ public class SensorService extends Service {
                         .subscribe(
                                 item -> {
                                     Log.d(TAG, "item sent: " + item.id);
-                                    while (!db.isBusy) {
-                                        Log.d(TAG, "Waiting to delete");
-                                        Thread.sleep(10);
-                                    }
                                     db.deleteRecord(item.id);
                                     // TODO: remove item from array / DB
                                 },
