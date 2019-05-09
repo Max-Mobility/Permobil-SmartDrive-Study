@@ -3,6 +3,7 @@ package com.permobil.psds.wearos;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
 import android.util.Log;
 
 public class BootReceiver extends BroadcastReceiver {
@@ -11,20 +12,16 @@ public class BootReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
         Log.i(TAG, "AutoStart onReceive...");
-
-        // context.startService(new Intent(context, SensorService.class));
-
-//        if (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
-//            SensorService.enqueueWork(context, new Intent());
-//        }
-
-
-//        Intent i = new Intent(context, SensorService.class);
-//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-//            context.startForegroundService(i);
-//        } else {
-//            context.startService(i);
-//        }
-//        Log.i(TAG, "AutoStart onReceive...");
+        if (intent.getAction().equalsIgnoreCase(Intent.ACTION_BOOT_COMPLETED)) {
+            Intent i = new Intent(context, SensorService.class);
+            i.setAction(Constants.ACTION_START_SERVICE);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Log.i(TAG, "Starting foreground service on boot");
+                context.startForegroundService(i);
+            } else {
+                Log.i(TAG, "Starting service on boot");
+                context.startService(i);
+            }
+        }
     }
 }
