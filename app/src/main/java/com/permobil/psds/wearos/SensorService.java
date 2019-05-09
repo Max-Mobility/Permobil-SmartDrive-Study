@@ -93,6 +93,8 @@ public class SensorService extends Service {
     public boolean watchBeingWorn = false;
     public boolean isServiceRunning = false;
 
+    public boolean isDebuggable = false;
+
     public long numRecordsPushed = 0;
     public long numRecordsSaved = 0;
 
@@ -112,6 +114,9 @@ public class SensorService extends Service {
         super.onCreate();
         Log.d(TAG, "SensorService onCreate...");
         startServiceWithNotification();
+
+        // set the debuggable flag
+        isDebuggable = (0 != (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE));
 
         Log.d(TAG, "Create sensor SQLite database...");
         db = new SensorDbHandler(getApplicationContext());
@@ -493,12 +498,7 @@ public class SensorService extends Service {
 
         boolean hasBeenActive() {
             //Log.d(TAG, "PersonIsActive: " + personIsActive + "; watchBeingWorn: " + watchBeingWorn);
-            boolean isDebuggable = (0 != (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE));
-            if (isDebuggable) {
-                return true;
-            } else {
-                return watchBeingWorn;
-            }
+            return isDebuggable || watchBeingWorn;
         }
 
     }
