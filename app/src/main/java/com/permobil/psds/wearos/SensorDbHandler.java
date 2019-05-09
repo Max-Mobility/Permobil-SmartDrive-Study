@@ -73,7 +73,7 @@ public class SensorDbHandler extends SQLiteOpenHelper {
 
         CursorWindow cw = null;
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-            cw = new CursorWindow("getRecordsCursor", 4000000);
+            cw = new CursorWindow("getRecordsCursor", 10000000);
         } else {
             cw = new CursorWindow("getRecordsCursor");
         }
