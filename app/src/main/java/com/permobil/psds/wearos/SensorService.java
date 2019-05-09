@@ -493,12 +493,7 @@ public class SensorService extends Service {
 
         boolean hasBeenActive() {
             //Log.d(TAG, "PersonIsActive: " + personIsActive + "; watchBeingWorn: " + watchBeingWorn);
-            boolean isDebuggable = (0 != (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE));
-            if (isDebuggable) {
-                return true;
-            } else {
-                return watchBeingWorn;
-            }
+            return watchBeingWorn;
         }
 
     }
