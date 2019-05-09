@@ -4,7 +4,6 @@ import android.Manifest;
 import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
@@ -22,8 +21,6 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
-import java.util.Timer;
-import java.util.TimerTask;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -37,13 +34,12 @@ public class MainActivity extends WearableActivity {
     private TextView mServiceStatusText;
     private TextView mStudyIdText;
     private SharedPreferences sharedPref;
-    private BroadcastReceiver mMessageReceiver;
     private boolean isServiceRunning;
     private boolean hasStoragePermission;
     private boolean hasLocationPermission;
 
     private final static String TAG = "PSDS_MainActivity";
-    private final static int LOCATION_PERMSSION_VALUE = 5425;
+    private final static int LOCATION_PERMISSION_VALUE = 5425;
     private final static int STORAGE_PERMISSION_VALUE = 5426;
 
 
@@ -52,7 +48,8 @@ public class MainActivity extends WearableActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        this.mMessageReceiver = new BroadcastReceiver() {
+        // Get extra data included in the Intent
+        BroadcastReceiver mMessageReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
 
@@ -66,16 +63,6 @@ public class MainActivity extends WearableActivity {
                 if (dbRecordCount != null && !dbRecordCount.equals("")) {
                     mLocalDbRecordsCount.setText(dbRecordCount);
                     mLocalDbRecordsCount.setVisibility(View.VISIBLE);
-                    new Timer().schedule(
-                            new TimerTask() {
-                                @Override
-                                public void run() {
-                                    // your code here
-                                    mLocalDbRecordsCount.setVisibility(View.GONE);
-                                }
-                            },
-                            5000
-                    );
                 }
             }
         };
@@ -91,9 +78,10 @@ public class MainActivity extends WearableActivity {
         mServiceStatusText = findViewById(R.id.serviceStatusText);
         mTextView = findViewById(R.id.studyId);
         mLocalDbRecordsCount = findViewById(R.id.localDbRecordCountTextView);
+        mLocalDbRecordsCount.setVisibility(View.GONE); // hide this initially
         // Handle app version textview setting
         mAppVersion = findViewById(R.id.appVersionTextView);
-        PackageInfo pInfo = null;
+        PackageInfo pInfo;
         try {
             pInfo = getApplicationContext().getPackageManager().getPackageInfo(getPackageName(), 0);
             String version = pInfo.versionName;
@@ -197,7 +185,7 @@ public class MainActivity extends WearableActivity {
                 // If request is cancelled, the result arrays are empty.
                 hasStoragePermission = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
             }
-            case LOCATION_PERMSSION_VALUE: {
+            case LOCATION_PERMISSION_VALUE: {
                 // If request is cancelled, the result arrays are empty.
                 hasLocationPermission = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
             }
@@ -212,7 +200,7 @@ public class MainActivity extends WearableActivity {
             ActivityCompat.requestPermissions(this,
                     new String[]{Manifest.permission
                             .ACCESS_FINE_LOCATION},
-                    LOCATION_PERMSSION_VALUE);
+                    LOCATION_PERMISSION_VALUE);
             hasStoragePermission = false;
         } else {
             hasStoragePermission = true;
@@ -254,16 +242,8 @@ public class MainActivity extends WearableActivity {
         final AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setMessage("Your GPS seems to be disabled, do you want to enable it?")
                 .setCancelable(false)
-                .setPositiveButton("Yes", new DialogInterface.OnClickListener() {
-                    public void onClick(final DialogInterface dialog, final int id) {
-                        startActivity(new Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS));
-                    }
-                })
-                .setNegativeButton("No", new DialogInterface.OnClickListener() {
-                    public void onClick(final DialogInterface dialog, final int id) {
-                        dialog.cancel();
-                    }
-                });
+                .setPositiveButton("Yes", (dialog, id) -> startActivity(new Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)))
+                .setNegativeButton("No", (dialog, id) -> dialog.cancel());
         final AlertDialog alert = builder.create();
         alert.show();
     }
