@@ -19,7 +19,6 @@ import android.hardware.SensorManager;
 import android.hardware.TriggerEvent;
 import android.hardware.TriggerEventListener;
 import android.location.Location;
-import android.location.LocationListener;
 import android.location.LocationManager;
 import android.net.ConnectivityManager;
 import android.net.Network;
@@ -57,7 +56,7 @@ public class SensorService extends Service {
     private static final int sensorDelay = 60 * 1000;// microseconds between sensor data // android.hardware.SensorManager.SENSOR_DELAY_UI;
     private static final int maxReportingLatency = 1000000; // 10 seconds between sensor updates
     // TODO: change these values for release
-    private static final int SAVE_TASK_PERIOD_MS = 1 * 60 * 1000;
+    private static final int SAVE_TASK_PERIOD_MS = 60 * 1000;
     private static final int SEND_TASK_PERIOD_MS = 5 * 60 * 1000;
     private static final long LOCATION_LISTENER_MIN_TIME_MS = 5 * 60 * 1000;
     private static final float LOCATION_LISTENER_MIN_DISTANCE_M = 100;
@@ -103,7 +102,6 @@ public class SensorService extends Service {
     public long numRecordsSaved = 0;
 
     public ArrayList<PSDSData.SensorData> sensorServiceDataList = new ArrayList<>();
-    public List<PSDSData> dataList = new ArrayList<>();
 
     public SensorService() {
     }
@@ -222,7 +220,7 @@ public class SensorService extends Service {
             Log.d(TAG, "Do we want to clear the entire SQLite DB here? Or should we just let it grow and only delete once a record has been sent to Kinvey successfully???");
         } catch (Exception e) {
             Log.e(TAG, "Error purging local data" + e.getMessage());
-            sendMessageToActivity("Error trying to purge local data: " + e.getMessage());
+            sendMessageToActivity("Error trying to purge local data: " + e.getMessage(), Constants.SENSOR_SERVICE_MESSAGE);
             Sentry.capture(e);
         }
     }
@@ -231,6 +229,7 @@ public class SensorService extends Service {
         Log.d(TAG, "_PushDataToKinvey()...");
         // Check if the SQLite table has any records pending to be pushed
         long tableRowCount = db.getTableRowCount();
+        sendMessageToActivity("Local Database Records: " + tableRowCount, Constants.SENSOR_SERVICE_LOCAL_DB_RECORD_COUNT);
         if (tableRowCount == 0) {
             Log.d(TAG, "No unsent data, clearing the storage.");
             _PurgeLocalData();
@@ -238,7 +237,7 @@ public class SensorService extends Service {
         } else {
             long pushCount = Math.min(tableRowCount, 10);
             Log.d(TAG, "Pushing to kinvey: " + pushCount);
-            sendMessageToActivity("Sending " + pushCount + " records to backend");
+            sendMessageToActivity("Sending " + pushCount + " records to backend", Constants.SENSOR_SERVICE_MESSAGE);
             try {
                 Observable.just(db.getRecords(10))
                         .flatMap(Observable::fromIterable)
@@ -259,12 +258,12 @@ public class SensorService extends Service {
                                 },
                                 () -> {
                                     Log.d(TAG, "onCompleted()");
-                                    sendMessageToActivity("Sent " + pushCount + " records to backend successfully.");
+                                    sendMessageToActivity("Sent " + pushCount + " records to backend successfully.", Constants.SENSOR_SERVICE_MESSAGE);
                                     unregisterNetwork();
                                 });
             } catch (Exception e) {
                 Log.e(TAG, "Exception pushing to kinvey:" + e.getMessage());
-                sendMessageToActivity("Error sending to database: " + e.getMessage());
+                sendMessageToActivity("Error sending to database: " + e.getMessage(), Constants.SENSOR_SERVICE_MESSAGE);
                 Sentry.capture(e);
                 unregisterNetwork();
             }
@@ -316,7 +315,7 @@ public class SensorService extends Service {
                 numRecordsSaved++;
             } catch (Exception e) {
                 Log.e(TAG, "Exception:" + e.getMessage());
-                sendMessageToActivity("Error saving: " + e.getMessage());
+                sendMessageToActivity("Error saving: " + e.getMessage(), Constants.SENSOR_SERVICE_MESSAGE);
                 Sentry.capture(e);
                 unregisterNetwork();
             }
@@ -498,7 +497,8 @@ public class SensorService extends Service {
 
         public boolean hasBeenActive() {
             //Log.d(TAG, "PersonIsActive: " + personIsActive + "; watchBeingWorn: " + watchBeingWorn);
-            return watchBeingWorn;
+//            return watchBeingWorn;
+            return true;
         }
 
     }
@@ -603,10 +603,10 @@ public class SensorService extends Service {
         return true;
     }
 
-    private void sendMessageToActivity(String msg) {
+    private void sendMessageToActivity(String msg, String extraKey) {
         Intent intent = new Intent(Constants.SENSOR_SERVICE_MESSAGE_INTENT_KEY);
         // You can also include some extra data.
-        intent.putExtra(Constants.SENSOR_SERVICE_MESSAGE, msg);
+        intent.putExtra(extraKey, msg);
         LocalBroadcastManager.getInstance(getApplicationContext()).sendBroadcast(intent);
     }
 

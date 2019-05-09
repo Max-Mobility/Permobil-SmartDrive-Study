@@ -32,6 +32,14 @@
                     android:orientation="vertical" >
 
                     <TextView
+                        android:id="@+id/appVersionTextView"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/roboto"
+                        android:text="TextView"
+                        android:textAlignment="center" />
+
+                    <TextView
                         android:id="@+id/studyIdTxt"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -55,6 +63,11 @@
                         android:fontFamily="@font/roboto_bold_italic"
                         android:text="@string/service_status_normal"
                         android:textAlignment="center" />
+
+                    <TextView
+                        android:id="@+id/localDbRecordCountTextView"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
 
                     <Space
                         android:layout_width="match_parent"

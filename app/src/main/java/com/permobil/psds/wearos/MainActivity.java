@@ -8,6 +8,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.location.LocationManager;
 import android.os.Bundle;
@@ -21,12 +22,16 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class MainActivity extends WearableActivity {
 
     private TextView mTextView;
+    private TextView mAppVersion;
+    private TextView mLocalDbRecordsCount;
     private Button mSubmitBtn;
     private Button mPermissionsButton;
     private TextView mServiceStatusText;
@@ -50,9 +55,28 @@ public class MainActivity extends WearableActivity {
         this.mMessageReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
+
                 // Get extra data included in the Intent
                 String message = intent.getStringExtra(Constants.SENSOR_SERVICE_MESSAGE);
-                mServiceStatusText.setText(message);
+                if (message != null && !message.equals("")) {
+                    mServiceStatusText.setText(message);
+                }
+
+                String dbRecordCount = intent.getStringExtra(Constants.SENSOR_SERVICE_LOCAL_DB_RECORD_COUNT);
+                if (dbRecordCount != null && !dbRecordCount.equals("")) {
+                    mLocalDbRecordsCount.setText(dbRecordCount);
+                    mLocalDbRecordsCount.setVisibility(View.VISIBLE);
+                    new Timer().schedule(
+                            new TimerTask() {
+                                @Override
+                                public void run() {
+                                    // your code here
+                                    mLocalDbRecordsCount.setVisibility(View.GONE);
+                                }
+                            },
+                            5000
+                    );
+                }
             }
         };
 
@@ -66,48 +90,57 @@ public class MainActivity extends WearableActivity {
         sharedPref = getSharedPreferences(getString(R.string.shared_preference_file_key), Context.MODE_PRIVATE);
         mServiceStatusText = findViewById(R.id.serviceStatusText);
         mTextView = findViewById(R.id.studyId);
+        mLocalDbRecordsCount = findViewById(R.id.localDbRecordCountTextView);
+        // Handle app version textview setting
+        mAppVersion = findViewById(R.id.appVersionTextView);
+        PackageInfo pInfo = null;
+        try {
+            pInfo = getApplicationContext().getPackageManager().getPackageInfo(getPackageName(), 0);
+            String version = pInfo.versionName;
+            int versionCode = pInfo.versionCode;
+            mAppVersion.setText(String.format("App Version: %s - %s", version, versionCode));
+            mAppVersion.setVisibility(View.VISIBLE);
+        } catch (PackageManager.NameNotFoundException e) {
+            e.printStackTrace();
+            mAppVersion.setVisibility(View.GONE);
+        }
+
         mStudyIdText = findViewById(R.id.studyIdTxt);
         mSubmitBtn = findViewById(R.id.submitBtn);
-        mSubmitBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                // check the psds identifier the user entered and validate
-                // also store in shared preferences so we can check on start later to skip entering it
-                String studyId = mTextView.getText().toString().toLowerCase();
-                if (!studyId.equals("")) {
-                    Pattern p = Pattern.compile("PSDS[0-9]+", Pattern.CASE_INSENSITIVE);
-                    Matcher m = p.matcher(studyId);
-                    boolean b = m.matches();
+        mSubmitBtn.setOnClickListener(v -> {
+            // check the psds identifier the user entered and validate
+            // also store in shared preferences so we can check on start later to skip entering it
+            String studyId = mTextView.getText().toString().toLowerCase();
+            if (!studyId.equals("")) {
+                Pattern p = Pattern.compile("PSDS[0-9]+", Pattern.CASE_INSENSITIVE);
+                Matcher m = p.matcher(studyId);
+                boolean b = m.matches();
 
-                    if (b || studyId.equals("xxr&dxx")) {
-                        Log.d(TAG, "User ID is valid.");
-                        // save to sharedPref
-                        sharedPref.edit().putString(Constants.SAVED_STUDY_ID, studyId).apply();
-                        // can start the service now
-                        startSensorService(studyId);
-                    } else {
-                        mServiceStatusText.setVisibility(View.VISIBLE);
-                        mServiceStatusText.setText("Study ID is invalid. Try again.");
-                    }
+                if (b || studyId.equals("xxr&dxx")) {
+                    Log.d(TAG, "User ID is valid.");
+                    // save to sharedPref
+                    sharedPref.edit().putString(Constants.SAVED_STUDY_ID, studyId).apply();
+                    // can start the service now
+                    startSensorService(studyId);
                 } else {
                     mServiceStatusText.setVisibility(View.VISIBLE);
-                    mServiceStatusText.setText("Study ID is required.");
+                    mServiceStatusText.setText("Study ID is invalid. Try again.");
                 }
+            } else {
+                mServiceStatusText.setVisibility(View.VISIBLE);
+                mServiceStatusText.setText("Study ID is required.");
             }
         });
         mPermissionsButton = findViewById(R.id.permissionBtn);
-        mPermissionsButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                // need to see if permissions have been granted if so we can move past this step
-                boolean b = hasPermissionsForService();
-                if (b) {
-                    recreate();
-                    return;
-                }
-                requestStoragePermission();
-                requestLocationPermission();
+        mPermissionsButton.setOnClickListener(v -> {
+            // need to see if permissions have been granted if so we can move past this step
+            boolean b = hasPermissionsForService();
+            if (b) {
+                recreate();
+                return;
             }
+            requestStoragePermission();
+            requestLocationPermission();
         });
 
         // check if user already has entered study ID
@@ -118,7 +151,6 @@ public class MainActivity extends WearableActivity {
         if (!isGpsEnabled) {
             buildAlertMessageNoGps();
         }
-
 
         // we have a study id for the device so just start the service to collect data
         if (!savedStudyId.equals("")) {
@@ -241,7 +273,7 @@ public class MainActivity extends WearableActivity {
         i.setAction(Constants.ACTION_START_SERVICE);
 
         // startForegroundService(i);
-       startService(i);
+        startService(i);
         Log.d(TAG, "SensorService has been started successfully with study ID: " + studyId);
         isServiceRunning = true;
         mTextView.setVisibility(View.GONE);
