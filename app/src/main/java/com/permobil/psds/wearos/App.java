@@ -3,8 +3,6 @@ package com.permobil.psds.wearos;
 import android.app.Application;
 import android.util.Log;
 
-import java.io.IOException;
-
 import io.sentry.Sentry;
 import io.sentry.android.AndroidSentryClientFactory;
 import io.sentry.event.BreadcrumbBuilder;
@@ -28,12 +26,9 @@ public class App extends Application {
 
 
         Thread.setDefaultUncaughtExceptionHandler(
-                new Thread.UncaughtExceptionHandler() {
-                    @Override
-                    public void uncaughtException(Thread thread, Throwable e) {
-                        Log.e(TAG, e.getMessage());
-                        Sentry.capture(e);
-                    }
+                (thread, e) -> {
+                    Log.e(TAG, e.getMessage());
+                    Sentry.capture(e);
                 });
 
     }
