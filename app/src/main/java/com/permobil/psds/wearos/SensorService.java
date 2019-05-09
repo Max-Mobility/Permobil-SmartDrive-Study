@@ -633,8 +633,7 @@ public class SensorService extends Service {
 
         // create the notification builder
         Builder notificationBuilder = new Builder(this, Constants.NOTIFICATION_CHANNEL)
-                .setContentTitle(getResources().getString(R.string.app_name))
-                .setTicker(getResources().getString(R.string.app_name))
+                .setTicker("Permobil")
                 .setContentText("Permobil Sensor Data Study is collecting data.")
                 .setSmallIcon(R.mipmap.ic_launcher_round)
                 .setLargeIcon(Bitmap.createScaledBitmap(icon, 128, 128, false))
