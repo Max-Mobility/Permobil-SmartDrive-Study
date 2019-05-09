@@ -9,6 +9,7 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -36,7 +37,6 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
 
 import io.reactivex.Observable;
@@ -64,10 +64,6 @@ public class SensorService extends Service {
     private String userIdentifier;
     private String deviceUUID;
     private SensorDbHandler db;
-    private Builder notificationBuilder;
-    private NotificationManager notificationManager;
-    private Notification notification;
-    private Retrofit retrofit;
     private KinveyApiService mKinveyApiService;
     private String mKinveyAuthorization;
     private Handler mHandler;
@@ -75,7 +71,6 @@ public class SensorService extends Service {
     private Runnable mSaveTask;
     private Location mLastKnownLocation;
     private LocationManager mLocationManager;
-    private LocationListener mLocationListener;
     private TriggerSensorListener mTriggerListener;
     private SensorEventListener mListener;
     private SensorManager mSensorManager;
@@ -133,7 +128,7 @@ public class SensorService extends Service {
 
         // Get the LocationManager so we can send last known location with the record when saving to Kinvey
         mLocationManager = (LocationManager) getApplicationContext().getSystemService(Context.LOCATION_SERVICE);
-        mLocationListener = new LocationListener();
+        LocationListener mLocationListener = new LocationListener();
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             Log.w(TAG, "Unable to get device location because LOCATION permission has not been granted.");
         } else {
@@ -151,7 +146,7 @@ public class SensorService extends Service {
         Log.d(TAG, "providers: " + mLocationManager.getProviders(false));
 
         // create the retrofit instance
-        retrofit = new Retrofit.Builder()
+        Retrofit retrofit = new Retrofit.Builder()
                 .baseUrl(Constants.API_BASE)
                 .addConverterFactory(GsonConverterFactory.create())
                 .addCallAdapterFactory(RxJava2CallAdapterFactory.create())
@@ -229,7 +224,6 @@ public class SensorService extends Service {
         Log.d(TAG, "_PushDataToKinvey()...");
         // Check if the SQLite table has any records pending to be pushed
         long tableRowCount = db.getTableRowCount();
-        sendMessageToActivity("Local Database Records: " + tableRowCount, Constants.SENSOR_SERVICE_LOCAL_DB_RECORD_COUNT);
         if (tableRowCount == 0) {
             Log.d(TAG, "No unsent data, clearing the storage.");
             _PurgeLocalData();
@@ -313,6 +307,8 @@ public class SensorService extends Service {
             try {
                 db.addRecord(data);
                 numRecordsSaved++;
+                // Send the Table row count to the UI to keep user informed on how many records are local and need to be pushed
+                sendMessageToActivity("Local Database Records: " + db.getTableRowCount(), Constants.SENSOR_SERVICE_LOCAL_DB_RECORD_COUNT);
             } catch (Exception e) {
                 Log.e(TAG, "Exception:" + e.getMessage());
                 sendMessageToActivity("Error saving: " + e.getMessage(), Constants.SENSOR_SERVICE_MESSAGE);
@@ -495,10 +491,14 @@ public class SensorService extends Service {
             }
         }
 
-        public boolean hasBeenActive() {
+        boolean hasBeenActive() {
             //Log.d(TAG, "PersonIsActive: " + personIsActive + "; watchBeingWorn: " + watchBeingWorn);
-//            return watchBeingWorn;
-            return true;
+            boolean isDebuggable = (0 != (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE));
+            if (isDebuggable) {
+                return true;
+            } else {
+                return watchBeingWorn;
+            }
         }
 
     }
@@ -623,7 +623,7 @@ public class SensorService extends Service {
         Bitmap icon = BitmapFactory.decodeResource(getResources(), R.mipmap.ic_launcher_round);
 
         // create the notification channel
-        notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         String channelId = Constants.NOTIFICATION_CHANNEL;
         int importance = NotificationManager.IMPORTANCE_HIGH;
         NotificationChannel notificationChannel = new NotificationChannel(channelId, Constants.NOTIFICATION_CHANNEL, importance);
@@ -632,7 +632,7 @@ public class SensorService extends Service {
         notificationManager.createNotificationChannel(notificationChannel);
 
         // create the notification builder
-        notificationBuilder = new Builder(this, Constants.NOTIFICATION_CHANNEL)
+        Builder notificationBuilder = new Builder(this, Constants.NOTIFICATION_CHANNEL)
                 .setContentTitle(getResources().getString(R.string.app_name))
                 .setTicker(getResources().getString(R.string.app_name))
                 .setContentText("Permobil Sensor Data Study is collecting data.")
@@ -643,7 +643,7 @@ public class SensorService extends Service {
                 .setChannelId(channelId);
 
         // create the notification
-        notification = notificationBuilder.build();
+        Notification notification = notificationBuilder.build();
         notification.flags = notification.flags | Notification.FLAG_ONGOING_EVENT | Notification.FLAG_NO_CLEAR; // NO_CLEAR makes the notification stay when the user performs a "delete all" command
         startForeground(NOTIFICATION_ID, notification);
     }
