@@ -1,9 +1,11 @@
 package com.permobil.psds.wearos;
 
 import android.os.Build;
+import android.os.SystemClock;
 
 import com.google.api.client.util.Key;
 
+import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 
@@ -15,12 +17,6 @@ public class PSDSData {
          */
         @Key("s")
         public int s;
-
-        /**
-         * Sensor event timestamp.
-         */
-        @Key("ts")
-        public long ts;
 
         /**
          * Returns the seconds since Epoch
@@ -42,8 +38,7 @@ public class PSDSData {
 
         public SensorData(int s, long ts, List<Float> d) {
             this.s = s;
-            this.t = System.currentTimeMillis() / 1000;
-            this.ts = ts;
+            this.t = (new Date()).getTime() + (ts - SystemClock.elapsedRealtimeNanos()) / 1000000L;
             this.d = d;
         }
     }
