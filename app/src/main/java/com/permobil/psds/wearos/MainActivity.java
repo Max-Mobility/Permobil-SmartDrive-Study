@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.location.LocationManager;
@@ -100,11 +101,13 @@ public class MainActivity extends WearableActivity {
             // also store in shared preferences so we can check on start later to skip entering it
             String studyId = mTextView.getText().toString().toLowerCase();
             if (!studyId.equals("")) {
+
+                boolean isDebuggable = (0 != (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE));
                 Pattern p = Pattern.compile("PSDS[0-9]+", Pattern.CASE_INSENSITIVE);
                 Matcher m = p.matcher(studyId);
                 boolean b = m.matches();
 
-                if (b || studyId.equals("xxr&dxx")) {
+                if (b || studyId.equals("xxr&dxx") || isDebuggable) {
                     Log.d(TAG, "User ID is valid.");
                     // save to sharedPref
                     sharedPref.edit().putString(Constants.SAVED_STUDY_ID, studyId).apply();
