@@ -12,6 +12,7 @@ import android.util.Log;
 
 import com.google.gson.Gson;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,8 +29,11 @@ public class SensorDbHandler extends SQLiteOpenHelper {
     private static final String KEY_DATA = "data";
     private static final String KEY_DATA_ID = "uuid";
 
+    private Context mContext;
+
     public SensorDbHandler(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
+        mContext = context;
     }
 
     @Override
@@ -59,7 +63,7 @@ public class SensorDbHandler extends SQLiteOpenHelper {
         values.put(KEY_DATA_ID, data._id);
         values.put(KEY_DATA, dataAsJson);
         db.insert(TABLE_NAME, null, values);
-        //db.close();
+        db.close();
     }
 
     public List<PSDSData> getRecords(int numRecords) {
@@ -96,7 +100,7 @@ public class SensorDbHandler extends SQLiteOpenHelper {
         }
 
         cursor.close();
-        //db.close();
+        db.close();
         Log.d(TAG, "Returning SQLite RecordList with record count: " + recordList.size());
         return recordList;
     }
@@ -105,21 +109,27 @@ public class SensorDbHandler extends SQLiteOpenHelper {
         SQLiteDatabase db = this.getWritableDatabase();
         long count = DatabaseUtils.queryNumEntries(db, TABLE_NAME);
         Log.d(TAG, "Current SQLite Table Row Count: " + count);
-        //db.close();
+        db.close();
         return count;
+    }
+
+    public long getTableSizeBytes() {
+        File f = mContext.getDatabasePath(DATABASE_NAME);
+        long dbSize = f.length();
+        return dbSize;
     }
 
     synchronized public void deleteRecord(String id) {
         SQLiteDatabase db = this.getWritableDatabase();
         db.delete(TABLE_NAME, KEY_DATA_ID + "=?", new String[]{id});
         Log.d(TAG, "Deleted record from database with id: " + id);
-        //db.close();
+        db.close();
     }
 
     public void deleteDatabase_DO_YOU_KNOW_WHAT_YOU_ARE_DOING() {
         SQLiteDatabase db = this.getWritableDatabase();
         db.delete(DATABASE_NAME, null, null);
         Log.d(TAG, "Deleting entire database.");
-        //db.close();
+        db.close();
     }
 }
