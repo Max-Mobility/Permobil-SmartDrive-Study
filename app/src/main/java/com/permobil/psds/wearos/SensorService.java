@@ -53,8 +53,8 @@ public class SensorService extends Service {
     private static final String TAG = "PermobilSensorService";
     private static final int NOTIFICATION_ID = 543;
     private static final int NETWORK_CONNECTIVITY_TIMEOUT_MS = 60000;
-    private static final int sensorDelay = 60 * 1000;// microseconds between sensor data // android.hardware.SensorManager.SENSOR_DELAY_UI;
-    private static final int maxReportingLatency = 1000000; // 10 seconds between sensor updates
+    private static final int sensorDelay = android.hardware.SensorManager.SENSOR_DELAY_UI; // microseconds between sensor data // 60 * 1000;
+    private static final int maxReportingLatency = 15 * 1000 * 1000; // 15 seconds between sensor updates
     // TODO: change these values for release
     private static final int SAVE_TASK_PERIOD_MS = 60 * 1000;
     private static final int SEND_TASK_PERIOD_MS = 5 * 60 * 1000;
