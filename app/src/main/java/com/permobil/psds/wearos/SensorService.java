@@ -9,6 +9,7 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -25,6 +26,8 @@ import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
+import android.os.BatteryManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -54,10 +57,11 @@ public class SensorService extends Service {
     private static final int NOTIFICATION_ID = 543;
     private static final int NETWORK_CONNECTIVITY_TIMEOUT_MS = 60000;
     private static final int sensorDelay = android.hardware.SensorManager.SENSOR_DELAY_UI; // microseconds between sensor data // 60 * 1000;
-    private static final int maxReportingLatency = 15 * 1000 * 1000; // 15 seconds between sensor updates
+    private static final int maxReportingLatency = 15 * 1000 * 1000; // 15 seconds between sensor updates in microseconds
     // TODO: change these values for release
-    private static final int SAVE_TASK_PERIOD_MS = 60 * 1000;
-    private static final int SEND_TASK_PERIOD_MS = 5 * 60 * 1000;
+    private static final int SAVE_TASK_PERIOD_MS = 1  * 60 * 1000;
+    private static final int SEND_TASK_PERIOD_MS = 15 * 60 * 1000;
+    private static final int SEND_TASK_WITH_POWER_PERIOD_MS = 1 * 60 * 1000;
     private static final long LOCATION_LISTENER_MIN_TIME_MS = 5 * 60 * 1000;
     private static final float LOCATION_LISTENER_MIN_DISTANCE_M = 100;
 
@@ -199,7 +203,11 @@ public class SensorService extends Service {
 
                 mSendTask = () -> {
                     _RequestNetworkAndSend();
-                    mHandler.postDelayed(mSendTask, SEND_TASK_PERIOD_MS);
+                    if (isPlugged()) {
+                        mHandler.postDelayed(mSendTask, SEND_TASK_WITH_POWER_PERIOD_MS);
+                    } else {
+                        mHandler.postDelayed(mSendTask, SEND_TASK_PERIOD_MS);
+                    }
                 };
 
                 mSaveTask.run();
@@ -211,6 +219,18 @@ public class SensorService extends Service {
 
         return START_STICKY; // START_STICKY is used for services that are explicitly started and stopped as
         // needed
+    }
+
+    public boolean isPlugged() {
+        Context context = getApplicationContext();
+        boolean isPlugged= false;
+        Intent intent = context.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        int plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1);
+        isPlugged = plugged == BatteryManager.BATTERY_PLUGGED_AC || plugged == BatteryManager.BATTERY_PLUGGED_USB;
+        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.JELLY_BEAN) {
+            isPlugged = isPlugged || plugged == BatteryManager.BATTERY_PLUGGED_WIRELESS;
+        }
+        return isPlugged;
     }
 
     private void _PurgeLocalData() {
