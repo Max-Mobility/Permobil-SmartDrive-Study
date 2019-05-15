@@ -30,6 +30,7 @@ import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
 import android.util.Base64;
 import android.util.Log;
@@ -59,17 +60,18 @@ public class SensorService extends Service {
     private static final int sensorDelay = android.hardware.SensorManager.SENSOR_DELAY_UI; // microseconds between sensor data // 60 * 1000;
     private static final int maxReportingLatency = 15 * 1000 * 1000; // 15 seconds between sensor updates in microseconds
     // TODO: change these values for release
-    private static final int SAVE_TASK_PERIOD_MS = 1  * 60 * 1000;
-    private static final int SEND_TASK_PERIOD_MS = 30 * 60 * 1000;
-    private static final int SEND_TASK_WITH_POWER_PERIOD_MS = 1 * 60 * 1000;
+    private static final int SAVE_TASK_PERIOD_MS = 5  * 60 * 1000;
+    private static final int SEND_TASK_PERIOD_MS = 1 * 60 * 1000;
     private static final long LOCATION_LISTENER_MIN_TIME_MS = 5 * 60 * 1000;
     private static final float LOCATION_LISTENER_MIN_DISTANCE_M = 100;
+    private static final int MAX_SEND_COUNT = 1;
 
     private String userIdentifier;
     private String deviceUUID;
     private SensorDbHandler db;
     private KinveyApiService mKinveyApiService;
     private String mKinveyAuthorization;
+    private HandlerThread mHandlerThread;
     private Handler mHandler;
     private Runnable mSendTask;
     private Runnable mSaveTask;
@@ -130,7 +132,14 @@ public class SensorService extends Service {
         String uuid = android.provider.Settings.Secure.getString(getContentResolver(),
                 android.provider.Settings.Secure.ANDROID_ID);
         this.deviceUUID = uuid;
-        this.mHandler = new Handler();
+
+        // start up for service
+        this.mHandlerThread = new HandlerThread("com.permobil.psds.wearos.thread");
+        this.mHandlerThread.start();
+        this.mHandler = new Handler(this.mHandlerThread.getLooper());
+
+        this.mSaveTask = new SaveRunnable();
+        this.mSendTask = new SendRunnable();
 
         // clear the datastore (from previous app runs)
         _PurgeLocalData();
@@ -196,22 +205,9 @@ public class SensorService extends Service {
                 boolean didRegisterSensors = this._registerDeviceSensors(sensorDelay, maxReportingLatency);
                 Log.d(TAG, "Did register Sensors: " + didRegisterSensors);
 
-                mSaveTask = () -> {
-                    _SaveData();
-                    mHandler.postDelayed(mSaveTask, SAVE_TASK_PERIOD_MS);
-                };
-
-                mSendTask = () -> {
-                    _RequestNetworkAndSend();
-                    if (isPlugged()) {
-                        mHandler.postDelayed(mSendTask, SEND_TASK_WITH_POWER_PERIOD_MS);
-                    } else {
-                        mHandler.postDelayed(mSendTask, SEND_TASK_PERIOD_MS);
-                    }
-                };
-
-                mSaveTask.run();
-                mSendTask.run();
+                mHandler.removeCallbacksAndMessages(null);
+                mHandler.post(mSaveTask);
+                mHandler.postDelayed(mSendTask, SEND_TASK_PERIOD_MS);
             } else {
                 stopMyService();
             }
@@ -219,6 +215,24 @@ public class SensorService extends Service {
 
         return START_STICKY; // START_STICKY is used for services that are explicitly started and stopped as
         // needed
+    }
+
+    private class SaveRunnable implements Runnable {
+        @Override
+        public void run() {
+            _SaveData();
+            mHandler.postDelayed(mSaveTask, SAVE_TASK_PERIOD_MS);
+        }
+    }
+
+    private class SendRunnable implements Runnable {
+        @Override
+        public void run() {
+            if (isPlugged()) {
+                _RequestNetworkAndSend();
+            }
+            mHandler.postDelayed(mSendTask, SEND_TASK_PERIOD_MS);
+        }
     }
 
     public boolean isPlugged() {
@@ -255,11 +269,11 @@ public class SensorService extends Service {
             _PurgeLocalData();
             unregisterNetwork();
         } else {
-            long pushCount = Math.min(tableRowCount, 10);
+            long pushCount = Math.min(tableRowCount, MAX_SEND_COUNT);
             Log.d(TAG, "Pushing to kinvey: " + pushCount);
             sendMessageToActivity("Sending " + pushCount + " records to backend", Constants.SENSOR_SERVICE_MESSAGE);
             try {
-                Observable.just(db.getRecords(10))
+                Observable.just(db.getRecords(MAX_SEND_COUNT))
                         .flatMap(Observable::fromIterable)
                         .flatMap(x -> mKinveyApiService.sendData(mKinveyAuthorization, x))
                         .subscribeOn(Schedulers.io())
@@ -361,8 +375,8 @@ public class SensorService extends Service {
         _unregisterDeviceSensors();
 
         // remove handler tasks
-        mHandler.removeCallbacks(mSaveTask);
-        mHandler.removeCallbacks(mSendTask);
+        mHandler.removeCallbacksAndMessages(null);
+        mHandlerThread.quitSafely();
 
         isServiceRunning = false;
     }
