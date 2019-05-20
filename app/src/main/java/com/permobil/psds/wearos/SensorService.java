@@ -48,6 +48,7 @@ import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.schedulers.Schedulers;
 import io.sentry.Sentry;
 import io.sentry.event.UserBuilder;
+import okhttp3.RequestBody;
 import retrofit2.Retrofit;
 import retrofit2.adapter.rxjava2.RxJava2CallAdapterFactory;
 import retrofit2.converter.gson.GsonConverterFactory;
@@ -273,8 +274,7 @@ public class SensorService extends Service {
             Log.d(TAG, "Pushing to kinvey: " + pushCount);
             sendMessageToActivity("Sending " + pushCount + " records to backend", Constants.SENSOR_SERVICE_MESSAGE);
             try {
-                Observable.just(db.getRecords(MAX_SEND_COUNT))
-                        .flatMap(Observable::fromIterable)
+                Observable.just(RequestBody.create(okhttp3.MediaType.parse("application/json; charset=utf-8"), db.getRecord()))
                         .flatMap(x -> mKinveyApiService.sendData(mKinveyAuthorization, x))
                         .subscribeOn(Schedulers.io())
                         .observeOn(AndroidSchedulers.mainThread())

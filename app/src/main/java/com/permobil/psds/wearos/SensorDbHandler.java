@@ -117,6 +117,41 @@ public class SensorDbHandler extends SQLiteOpenHelper {
         return recordList;
     }
 
+    public String getRecord() {
+        String record = null;
+        String selectQuery = "SELECT * FROM " + TABLE_NAME + " ORDER BY " + KEY_ID + " ASC LIMIT 1";
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(selectQuery, null);
+
+        CursorWindow cw = null;
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            cw = new CursorWindow("getRecordCursor", 10000000);
+        } else {
+            cw = new CursorWindow("getRecordCursor");
+        }
+        AbstractWindowedCursor ac = (AbstractWindowedCursor) cursor;
+        ac.setWindow(cw);
+
+        // if TABLE has rows
+        if (cursor.moveToFirst()) {
+            Gson gson = new Gson();
+            try {
+                int index = cursor.getInt(0);
+                record = cursor.getString(1);
+                String uuid = cursor.getString(2);
+                Log.d(TAG, "record id: " + index + " - " + uuid);
+            } catch (Exception e) {
+                Log.e(TAG, "Exception getting record from db:" + e.getMessage());
+                Sentry.capture(e);
+            }
+        }
+
+        cursor.close();
+        db.close();
+        Log.d(TAG, "Returning SQLite Record");
+        return record;
+    }
+
     public long getTableRowCount() {
         SQLiteDatabase db = this.getWritableDatabase();
         long count = DatabaseUtils.queryNumEntries(db, TABLE_NAME);
