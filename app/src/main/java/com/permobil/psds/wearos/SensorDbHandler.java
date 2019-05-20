@@ -16,6 +16,9 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
+import io.sentry.Sentry;
+import io.sentry.SentryClient;
+
 public class SensorDbHandler extends SQLiteOpenHelper {
     private static final String TAG = "SensorDbHandler";
     // Database Version
@@ -56,13 +59,18 @@ public class SensorDbHandler extends SQLiteOpenHelper {
         SQLiteDatabase db = this.getReadableDatabase();
         ContentValues values = new ContentValues();
 
-        Gson gson = new Gson();
-        String dataAsJson = gson.toJson(data);
-        Log.d(TAG, "Saving new RECORD to SQL Table: " + data._id);
+        try {
+            Gson gson = new Gson();
+            String dataAsJson = gson.toJson(data);
+            values.put(KEY_DATA_ID, data._id);
+            values.put(KEY_DATA, dataAsJson);
+            db.insert(TABLE_NAME, null, values);
+            Log.d(TAG, "Saving new RECORD to SQL Table: " + data._id);
+        } catch (Exception e) {
+            Log.e(TAG, "Exception adding data to table: " + e.getMessage());
+            Sentry.capture(e);
+        }
 
-        values.put(KEY_DATA_ID, data._id);
-        values.put(KEY_DATA, dataAsJson);
-        db.insert(TABLE_NAME, null, values);
         db.close();
     }
 
@@ -84,19 +92,23 @@ public class SensorDbHandler extends SQLiteOpenHelper {
         AbstractWindowedCursor ac = (AbstractWindowedCursor) cursor;
         ac.setWindow(cw);
 
-        Gson gson = new Gson();
-
         // if TABLE has rows
         if (cursor.moveToFirst()) {
-            // Loop through the table rows
-            do {
-                int index = cursor.getInt(0);
-                PSDSData record = gson.fromJson(cursor.getString(1), PSDSData.class);
-                String uuid = cursor.getString(2);
-                Log.d(TAG, "record id: " + index + " - " + uuid);
-                // Add record to list
-                recordList.add(record);
-            } while (cursor.moveToNext());
+            Gson gson = new Gson();
+            try {
+                // Loop through the table rows
+                do {
+                    int index = cursor.getInt(0);
+                    PSDSData record = gson.fromJson(cursor.getString(1), PSDSData.class);
+                    String uuid = cursor.getString(2);
+                    Log.d(TAG, "record id: " + index + " - " + uuid);
+                    // Add record to list
+                    recordList.add(record);
+                } while (cursor.moveToNext());
+            } catch (Exception e) {
+                Log.e(TAG, "Exception parsing json:" + e.getMessage());
+                Sentry.capture(e);
+            }
         }
 
         cursor.close();
