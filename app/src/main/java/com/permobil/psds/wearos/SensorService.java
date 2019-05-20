@@ -48,6 +48,7 @@ import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.schedulers.Schedulers;
 import io.sentry.Sentry;
 import io.sentry.event.UserBuilder;
+import okhttp3.RequestBody;
 import retrofit2.Retrofit;
 import retrofit2.adapter.rxjava2.RxJava2CallAdapterFactory;
 import retrofit2.converter.gson.GsonConverterFactory;
@@ -60,8 +61,8 @@ public class SensorService extends Service {
     private static final int sensorDelay = android.hardware.SensorManager.SENSOR_DELAY_UI; // microseconds between sensor data // 60 * 1000;
     private static final int maxReportingLatency = 15 * 1000 * 1000; // 15 seconds between sensor updates in microseconds
     // TODO: change these values for release
-    private static final int SAVE_TASK_PERIOD_MS = 1 * 60 * 1000;
-    private static final int SEND_TASK_PERIOD_MS = 1 * 60 * 1000;
+    private static final int SAVE_TASK_PERIOD_MS = 1 * 60 * 1000; // each record will be 1 minute long
+    private static final int SEND_TASK_PERIOD_MS = 10 * 1000; // send a record every 10 seconds if possible
     private static final long LOCATION_LISTENER_MIN_TIME_MS = 5 * 60 * 1000;
     private static final float LOCATION_LISTENER_MIN_DISTANCE_M = 100;
     private static final int MAX_SEND_COUNT = 1;
@@ -273,8 +274,7 @@ public class SensorService extends Service {
             Log.d(TAG, "Pushing to kinvey: " + pushCount);
             sendMessageToActivity("Sending " + pushCount + " records to backend", Constants.SENSOR_SERVICE_MESSAGE);
             try {
-                Observable.just(db.getRecords(MAX_SEND_COUNT))
-                        .flatMap(Observable::fromIterable)
+                Observable.just(RequestBody.create(okhttp3.MediaType.parse("application/json; charset=utf-8"), db.getRecord()))
                         .flatMap(x -> mKinveyApiService.sendData(mKinveyAuthorization, x))
                         .subscribeOn(Schedulers.io())
                         .observeOn(AndroidSchedulers.mainThread())
