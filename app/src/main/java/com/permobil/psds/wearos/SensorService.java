@@ -59,7 +59,7 @@ public class SensorService extends Service {
     private static final int NOTIFICATION_ID = 543;
     private static final int NETWORK_CONNECTIVITY_TIMEOUT_MS = 60000;
     private static final int SENSOR_DELAY_DEBUG   = 40 * 1000; // microseconds between sensor data
-    private static final int SENSOR_DELAY_RELEASE = android.hardware.SensorManager.SENSOR_DELAY_NORMAL;
+    private static final int SENSOR_DELAY_RELEASE = 100 * 1000;// microseconds between sensor data
     private static final int maxReportingLatency = 15 * 1000 * 1000; // 15 seconds between sensor updates in microseconds
     // TODO: change these values for release
     private static final int SAVE_TASK_PERIOD_MS = 1 * 60 * 1000; // each record will be 1 minute long
