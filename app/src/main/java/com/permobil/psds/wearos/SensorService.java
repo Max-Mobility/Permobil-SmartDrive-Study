@@ -204,10 +204,7 @@ public class SensorService extends Service {
 
                 Log.d(TAG, "starting service!");
 
-                int sensorDelay = SENSOR_DELAY_RELEASE;
-                if (isDebuggable) {
-                    sensorDelay = SENSOR_DELAY_DEBUG;
-                }
+                int sensorDelay = isDebuggable ? SENSOR_DELAY_DEBUG : SENSOR_DELAY_RELEASE;
                 boolean didRegisterSensors = this._registerDeviceSensors(sensorDelay, maxReportingLatency);
                 Log.d(TAG, "Did register Sensors: " + didRegisterSensors);
 
