@@ -41,6 +41,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 import io.reactivex.Observable;
@@ -106,7 +107,7 @@ public class SensorService extends Service {
     public long numRecordsPushed = 0;
     public long numRecordsSaved = 0;
 
-    public ArrayList<PSDSData.SensorData> sensorServiceDataList = new ArrayList<>();
+    public List<PSDSData.SensorData> sensorServiceDataList = new ArrayList<>();
 
     public SensorService() {
     }
@@ -336,13 +337,15 @@ public class SensorService extends Service {
                 // manage how many records we make per save operation - ensure that no record is too long (memory / storage)
                 int numToCopy = Math.min(numRecordsToSave, MAX_NUM_ENTRIES_PER_RECORD);
                 int numRemaining = numRecordsToSave - numToCopy;
-                if (numRemaining > 0) {
-                    data.sensor_data = new ArrayList<>(sensorServiceDataList.subList(0, numToCopy));
-                    sensorServiceDataList.subList(0, numToCopy).clear();
-                } else {
-                    data.sensor_data = sensorServiceDataList;
-                    // reset the sensor data list for new values to be pushed into
-                    sensorServiceDataList = new ArrayList<>();
+                synchronized (this) {
+                    if (numRemaining > 0) {
+                        data.sensor_data = new ArrayList<>(sensorServiceDataList.subList(0, numToCopy));
+                        sensorServiceDataList.subList(0, numToCopy).clear();
+                    } else {
+                        data.sensor_data = sensorServiceDataList;
+                        // reset the sensor data list for new values to be pushed into
+                        sensorServiceDataList = new ArrayList<>();
+                    }
                 }
                 numRecordsToSave = sensorServiceDataList.size();
 
@@ -537,7 +540,9 @@ public class SensorService extends Service {
                 if (hasBeenActive()) {
                     // create new SensorServiceData
                     PSDSData.SensorData data = new PSDSData.SensorData(event.sensor.getType(), event.timestamp, dataList);
-                    sensorServiceDataList.add(data);
+                    synchronized (this) {
+                        sensorServiceDataList.add(data);
+                    }
                 }
             }
         }
