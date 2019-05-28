@@ -60,13 +60,13 @@ public class SensorService extends Service {
     private static final int NETWORK_CONNECTIVITY_TIMEOUT_MS = 60000;
     private static final int SENSOR_DELAY_DEBUG   = 40 * 1000; // microseconds between sensor data
     private static final int SENSOR_DELAY_RELEASE = 100 * 1000;// microseconds between sensor data
-    private static final int maxReportingLatency = 15 * 1000 * 1000; // 15 seconds between sensor updates in microseconds
-    // TODO: change these values for release
+    private static final int maxReportingLatency = 60 * 1000 * 1000; // 60 seconds between sensor updates in microseconds
     private static final int SAVE_TASK_PERIOD_MS = 1 * 60 * 1000; // each record will be 1 minute long
     private static final int SEND_TASK_PERIOD_MS = 10 * 1000; // send a record every 10 seconds if possible
     private static final long LOCATION_LISTENER_MIN_TIME_MS = 5 * 60 * 1000;
     private static final float LOCATION_LISTENER_MIN_DISTANCE_M = 100;
     private static final int MAX_SEND_COUNT = 1;
+    private static final int MAX_NUM_ENTRIES_PER_RECORD = 5 * 10 * 60 * 5; // 5 sensors * 10 Hz * 60 seconds * 5 minutes = max length of each log
 
     private String userIdentifier;
     private String deviceUUID;
@@ -223,7 +223,12 @@ public class SensorService extends Service {
     private class SaveRunnable implements Runnable {
         @Override
         public void run() {
-            _SaveData();
+            try {
+                _SaveData();
+            } catch (Exception e) {
+                Sentry.capture(e);
+                Log.e(TAG, "Exception in SaveRunnable: " + e.getMessage());
+            }
             mHandler.postDelayed(mSaveTask, SAVE_TASK_PERIOD_MS);
         }
     }
@@ -231,8 +236,13 @@ public class SensorService extends Service {
     private class SendRunnable implements Runnable {
         @Override
         public void run() {
-            if (isPlugged()) {
-                _RequestNetworkAndSend();
+            try {
+                if (isPlugged()) {
+                    _RequestNetworkAndSend();
+                }
+            } catch (Exception e) {
+                Sentry.capture(e);
+                Log.e(TAG, "Exception in SendRunnable: " + e.getMessage());
             }
             mHandler.postDelayed(mSendTask, SEND_TASK_PERIOD_MS);
         }
@@ -317,50 +327,63 @@ public class SensorService extends Service {
             Log.d(TAG, "Sensor data list is empty, so will not save/push this record.");
         } else {
             Log.d(TAG, "Database size: " + db.getTableSizeBytes() + " bytes");
-            PSDSData data = new PSDSData();
-            data.user_identifier = this.userIdentifier;
-            data.device_uuid = this.deviceUUID;
-            data.sensor_data = sensorServiceDataList;
-            // reset the sensor data list for new values to be pushed into
-            sensorServiceDataList = new ArrayList<>();
+            int numRecordsToSave = sensorServiceDataList.size();
+            while (numRecordsToSave > 0) {
+                PSDSData data = new PSDSData();
+                data.user_identifier = this.userIdentifier;
+                data.device_uuid = this.deviceUUID;
 
-            // if we have location permission write the location to record, if not, just print WARNING to LogCat, not sure on best handling for UX right now.
-            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                Log.w(TAG, "Unable to get device location because LOCATION permission has not been granted.");
-                data.location = null;
-            } else if (mLastKnownLocation != null) {
-                data.location = new PSDSLocation(mLastKnownLocation.getLatitude(), mLastKnownLocation.getLongitude(), mLastKnownLocation.getTime());
-            } else {
-                Location loc;
-                loc = mLocationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-                if (loc != null) {
-                    data.location = new PSDSLocation(loc.getLatitude(), loc.getLongitude(), loc.getTime());
+                // manage how many records we make per save operation - ensure that no record is too long (memory / storage)
+                int numToCopy = Math.min(numRecordsToSave, MAX_NUM_ENTRIES_PER_RECORD);
+                int numRemaining = numRecordsToSave - numToCopy;
+                if (numRemaining > 0) {
+                    data.sensor_data = new ArrayList<>(sensorServiceDataList.subList(0, numToCopy));
+                    sensorServiceDataList.subList(0, numToCopy).clear();
                 } else {
-                    loc = mLocationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+                    data.sensor_data = sensorServiceDataList;
+                    // reset the sensor data list for new values to be pushed into
+                    sensorServiceDataList = new ArrayList<>();
+                }
+                numRecordsToSave = sensorServiceDataList.size();
+
+                // if we have location permission write the location to record, if not, just print WARNING to LogCat, not sure on best handling for UX right now.
+                if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    Log.w(TAG, "Unable to get device location because LOCATION permission has not been granted.");
+                    data.location = null;
+                } else if (mLastKnownLocation != null) {
+                    data.location = new PSDSLocation(mLastKnownLocation.getLatitude(), mLastKnownLocation.getLongitude(), mLastKnownLocation.getTime());
+                } else {
+                    Location loc;
+                    loc = mLocationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
                     if (loc != null) {
                         data.location = new PSDSLocation(loc.getLatitude(), loc.getLongitude(), loc.getTime());
                     } else {
-                        loc = mLocationManager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER);
+                        loc = mLocationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
                         if (loc != null) {
                             data.location = new PSDSLocation(loc.getLatitude(), loc.getLongitude(), loc.getTime());
                         } else {
-                            data.location = null;
+                            loc = mLocationManager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER);
+                            if (loc != null) {
+                                data.location = new PSDSLocation(loc.getLatitude(), loc.getLongitude(), loc.getTime());
+                            } else {
+                                data.location = null;
+                            }
                         }
                     }
                 }
-            }
-            Log.d(TAG, "Data location: " + data.location);
+                Log.d(TAG, "Data location: " + data.location);
 
-            try {
-                db.addRecord(data);
-                numRecordsSaved++;
-                // Send the Table row count to the UI to keep user informed on how many records are local and need to be pushed
-                sendMessageToActivity("Local Database Records: " + db.getTableRowCount(), Constants.SENSOR_SERVICE_LOCAL_DB_RECORD_COUNT);
-            } catch (Exception e) {
-                Log.e(TAG, "Exception:" + e.getMessage());
-                sendMessageToActivity("Error saving: " + e.getMessage(), Constants.SENSOR_SERVICE_MESSAGE);
-                Sentry.capture(e);
-                unregisterNetwork();
+                try {
+                    db.addRecord(data);
+                    numRecordsSaved++;
+                    // Send the Table row count to the UI to keep user informed on how many records are local and need to be pushed
+                    sendMessageToActivity("Local Database Records: " + db.getTableRowCount(), Constants.SENSOR_SERVICE_LOCAL_DB_RECORD_COUNT);
+                } catch (Exception e) {
+                    Log.e(TAG, "Exception:" + e.getMessage());
+                    sendMessageToActivity("Error saving: " + e.getMessage(), Constants.SENSOR_SERVICE_MESSAGE);
+                    Sentry.capture(e);
+                    unregisterNetwork();
+                }
             }
         }
     }
