@@ -27,7 +27,6 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
 import android.os.BatteryManager;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -59,10 +58,10 @@ public class SensorService extends Service {
     private static final String TAG = "PermobilSensorService";
     private static final int NOTIFICATION_ID = 543;
     private static final int NETWORK_CONNECTIVITY_TIMEOUT_MS = 60000;
-    private static final int SENSOR_DELAY_DEBUG   = 40 * 1000; // microseconds between sensor data
+    private static final int SENSOR_DELAY_DEBUG = 40 * 1000; // microseconds between sensor data
     private static final int SENSOR_DELAY_RELEASE = 100 * 1000;// microseconds between sensor data
     private static final int maxReportingLatency = 60 * 1000 * 1000; // 60 seconds between sensor updates in microseconds
-    private static final int SAVE_TASK_PERIOD_MS = 1 * 60 * 1000; // each record will be 1 minute long
+    private static final int SAVE_TASK_PERIOD_MS = 60 * 1000; // each record will be 1 minute long
     private static final int SEND_TASK_PERIOD_MS = 10 * 1000; // send a record every 10 seconds if possible
     private static final long LOCATION_LISTENER_MIN_TIME_MS = 5 * 60 * 1000;
     private static final float LOCATION_LISTENER_MIN_DISTANCE_M = 100;
@@ -251,13 +250,14 @@ public class SensorService extends Service {
 
     public boolean isPlugged() {
         Context context = getApplicationContext();
-        boolean isPlugged= false;
+        boolean isPlugged;
         Intent intent = context.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
-        int plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1);
-        isPlugged = plugged == BatteryManager.BATTERY_PLUGGED_AC || plugged == BatteryManager.BATTERY_PLUGGED_USB;
-        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.JELLY_BEAN) {
-            isPlugged = isPlugged || plugged == BatteryManager.BATTERY_PLUGGED_WIRELESS;
+        int plugged = 0;
+        if (intent != null) {
+            plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1);
         }
+        isPlugged = plugged == BatteryManager.BATTERY_PLUGGED_AC || plugged == BatteryManager.BATTERY_PLUGGED_USB;
+        isPlugged = isPlugged || plugged == BatteryManager.BATTERY_PLUGGED_WIRELESS;
         return isPlugged;
     }
 
@@ -699,7 +699,11 @@ public class SensorService extends Service {
         NotificationChannel notificationChannel = new NotificationChannel(channelId, Constants.NOTIFICATION_CHANNEL, importance);
         notificationChannel.enableLights(false);
         notificationChannel.enableVibration(false);
-        notificationManager.createNotificationChannel(notificationChannel);
+        if (notificationManager != null) {
+            notificationManager.createNotificationChannel(notificationChannel);
+        } else {
+            Sentry.capture("NotificationManager was null. Unable to create the NotificationChannel to start the service with the notification.");
+        }
 
         // create the notification builder
         Builder notificationBuilder = new Builder(this, Constants.NOTIFICATION_CHANNEL)

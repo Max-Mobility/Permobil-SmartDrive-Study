@@ -17,7 +17,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import io.sentry.Sentry;
-import io.sentry.SentryClient;
 
 public class SensorDbHandler extends SQLiteOpenHelper {
     private static final String TAG = "SensorDbHandler";
@@ -83,7 +82,7 @@ public class SensorDbHandler extends SQLiteOpenHelper {
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(selectQuery, null);
 
-        CursorWindow cw = null;
+        CursorWindow cw;
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
             cw = new CursorWindow("getRecordsCursor", 20000000);
         } else {
@@ -123,7 +122,7 @@ public class SensorDbHandler extends SQLiteOpenHelper {
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(selectQuery, null);
 
-        CursorWindow cw = null;
+        CursorWindow cw;
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
             cw = new CursorWindow("getRecordCursor", 20000000);
         } else {
@@ -134,7 +133,6 @@ public class SensorDbHandler extends SQLiteOpenHelper {
 
         // if TABLE has rows
         if (cursor.moveToFirst()) {
-            Gson gson = new Gson();
             try {
                 int index = cursor.getInt(0);
                 record = cursor.getString(1);
@@ -162,8 +160,7 @@ public class SensorDbHandler extends SQLiteOpenHelper {
 
     public long getTableSizeBytes() {
         File f = mContext.getDatabasePath(DATABASE_NAME);
-        long dbSize = f.length();
-        return dbSize;
+        return f.length();
     }
 
     synchronized public void deleteRecord(String id) {
