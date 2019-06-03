@@ -568,7 +568,7 @@ public class SensorService extends Service {
 
         boolean hasBeenActive() {
             //Log.d(TAG, "PersonIsActive: " + personIsActive + "; watchBeingWorn: " + watchBeingWorn);
-            return isDebuggable || watchBeingWorn;
+            return watchBeingWorn;
         }
 
     }
