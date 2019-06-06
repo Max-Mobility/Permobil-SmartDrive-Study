@@ -337,7 +337,7 @@ public class SensorService extends Service {
                 // manage how many records we make per save operation - ensure that no record is too long (memory / storage)
                 int numToCopy = Math.min(numRecordsToSave, MAX_NUM_ENTRIES_PER_RECORD);
                 int numRemaining = numRecordsToSave - numToCopy;
-                synchronized (this) {
+                synchronized (sensorServiceDataList) {
                     if (numRemaining > 0) {
                         data.sensor_data = new ArrayList<>(sensorServiceDataList.subList(0, numToCopy));
                         sensorServiceDataList.subList(0, numToCopy).clear();
@@ -540,7 +540,7 @@ public class SensorService extends Service {
                 if (hasBeenActive()) {
                     // create new SensorServiceData
                     PSDSData.SensorData data = new PSDSData.SensorData(event.sensor.getType(), event.timestamp, dataList);
-                    synchronized (this) {
+                    synchronized (sensorServiceDataList) {
                         sensorServiceDataList.add(data);
                     }
                 }
