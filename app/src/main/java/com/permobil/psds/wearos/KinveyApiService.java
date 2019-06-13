@@ -6,6 +6,7 @@ import retrofit2.http.Body;
 import retrofit2.http.Header;
 import retrofit2.http.Headers;
 import retrofit2.http.PUT;
+import retrofit2.http.Path;
 
 public interface KinveyApiService {
     @Headers({
@@ -15,5 +16,5 @@ public interface KinveyApiService {
     Observable<PSDSData> sendData(@Header("Authorization") String authorization, String id, @Body PSDSData data);
 
     @PUT(Constants.API_DATA_ENDPOINT + "/{id}")
-    Observable<PSDSData> sendData(@Header("Authorization") String authorization, String id, @Body RequestBody data);
+    Observable<PSDSData> sendData(@Header("Authorization") String authorization, @Body RequestBody data, @Path("id") String id);
 }

@@ -289,7 +289,7 @@ public class SensorService extends Service {
             try {
                 SensorDbHandler.Record r = db.getRecord();
                 Observable.just(RequestBody.create(okhttp3.MediaType.parse("application/json; charset=utf-8"), r.data))
-                        .flatMap(x -> mKinveyApiService.sendData(mKinveyAuthorization, r.id, x))
+                        .flatMap(x -> mKinveyApiService.sendData(mKinveyAuthorization, x, r.id))
                         .subscribeOn(Schedulers.io())
                         .observeOn(AndroidSchedulers.mainThread())
                         .unsubscribeOn(Schedulers.io())
