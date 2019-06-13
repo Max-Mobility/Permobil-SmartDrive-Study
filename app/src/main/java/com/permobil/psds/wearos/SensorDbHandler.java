@@ -33,6 +33,11 @@ public class SensorDbHandler extends SQLiteOpenHelper {
 
     private Context mContext;
 
+    public class Record {
+        String id;
+        String data;
+    }
+
     public SensorDbHandler(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
         mContext = context;
@@ -116,8 +121,8 @@ public class SensorDbHandler extends SQLiteOpenHelper {
         return recordList;
     }
 
-    public String getRecord() {
-        String record = null;
+    public Record getRecord() {
+        Record record = new Record();
         String selectQuery = "SELECT * FROM " + TABLE_NAME + " ORDER BY " + KEY_ID + " ASC LIMIT 1";
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(selectQuery, null);
@@ -135,9 +140,9 @@ public class SensorDbHandler extends SQLiteOpenHelper {
         if (cursor.moveToFirst()) {
             try {
                 int index = cursor.getInt(0);
-                record = cursor.getString(1);
-                String uuid = cursor.getString(2);
-                Log.d(TAG, "record id: " + index + " - " + uuid);
+                record.data = cursor.getString(1);
+                record.id = cursor.getString(2);
+                Log.d(TAG, "record id: " + index + " - " + record.id);
             } catch (Exception e) {
                 Log.e(TAG, "Exception getting record from db:" + e.getMessage());
                 Sentry.capture(e);

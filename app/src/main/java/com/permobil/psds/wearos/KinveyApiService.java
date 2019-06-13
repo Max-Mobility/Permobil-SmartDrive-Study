@@ -5,15 +5,15 @@ import okhttp3.RequestBody;
 import retrofit2.http.Body;
 import retrofit2.http.Header;
 import retrofit2.http.Headers;
-import retrofit2.http.POST;
+import retrofit2.http.PUT;
 
 public interface KinveyApiService {
     @Headers({
             "Content-Type:application/json"
     })
-    @POST(Constants.API_DATA_ENDPOINT)
-    Observable<PSDSData> sendData(@Header("Authorization") String authorization, @Body PSDSData data);
+    @PUT(Constants.API_DATA_ENDPOINT + "/{id}")
+    Observable<PSDSData> sendData(@Header("Authorization") String authorization, String id, @Body PSDSData data);
 
-    @POST(Constants.API_DATA_ENDPOINT)
-    Observable<PSDSData> sendData(@Header("Authorization") String authorization, @Body RequestBody data);
+    @PUT(Constants.API_DATA_ENDPOINT + "/{id}")
+    Observable<PSDSData> sendData(@Header("Authorization") String authorization, String id, @Body RequestBody data);
 }

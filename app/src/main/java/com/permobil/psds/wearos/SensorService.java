@@ -287,8 +287,9 @@ public class SensorService extends Service {
             Log.d(TAG, "Pushing to kinvey: " + pushCount);
             sendMessageToActivity("Sending " + pushCount + " records to backend", Constants.SENSOR_SERVICE_MESSAGE);
             try {
-                Observable.just(RequestBody.create(okhttp3.MediaType.parse("application/json; charset=utf-8"), db.getRecord()))
-                        .flatMap(x -> mKinveyApiService.sendData(mKinveyAuthorization, x))
+                SensorDbHandler.Record r = db.getRecord();
+                Observable.just(RequestBody.create(okhttp3.MediaType.parse("application/json; charset=utf-8"), r.data))
+                        .flatMap(x -> mKinveyApiService.sendData(mKinveyAuthorization, r.id, x))
                         .subscribeOn(Schedulers.io())
                         .observeOn(AndroidSchedulers.mainThread())
                         .unsubscribeOn(Schedulers.io())
