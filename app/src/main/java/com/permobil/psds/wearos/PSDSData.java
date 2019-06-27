@@ -71,6 +71,9 @@ public class PSDSData {
     @Key("location")
     public PSDSLocation location;
 
+    @Key("locations")
+    public List<PSDSLocation> locations;
+
     public PSDSData() {
         this._id = UUID.randomUUID().toString();
         this.device_manufacturer = Build.MANUFACTURER;

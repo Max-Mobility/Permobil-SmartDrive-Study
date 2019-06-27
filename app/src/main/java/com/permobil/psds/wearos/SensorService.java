@@ -107,6 +107,7 @@ public class SensorService extends Service {
     public long numRecordsSaved = 0;
 
     public List<PSDSData.SensorData> sensorServiceDataList = new ArrayList<>();
+    public List<PSDSLocation> sensorServiceLocationList = new ArrayList<>();
 
     public SensorService() {
     }
@@ -350,6 +351,14 @@ public class SensorService extends Service {
                 }
                 numRecordsToSave = sensorServiceDataList.size();
 
+                // copy the locations over
+                synchronized (sensorServiceLocationList) {
+                    // TODO: will we need to split this up like we do the sensor data? - we shouldn't since there is far less data...
+                    int numLocations = sensorServiceLocationList.size();
+                    data.locations = new ArrayList<>(sensorServiceLocationList.subList(0, numLocations));
+                    sensorServiceLocationList.subList(0, numLocations);
+                }
+
                 // if we have location permission write the location to record, if not, just print WARNING to LogCat, not sure on best handling for UX right now.
                 if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                     Log.w(TAG, "Unable to get device location because LOCATION permission has not been granted.");
@@ -415,6 +424,11 @@ public class SensorService extends Service {
         public void onLocationChanged(Location location) {
             Log.d(TAG, "Got location: " + location);
             mLastKnownLocation = location;
+            // TODO: do we need to check if the user has been active here?
+            PSDSLocation loc = new PSDSLocation(location.getLatitude(), location.getLongitude(), location.getTime());
+            synchronized (sensorServiceLocationList) {
+                sensorServiceLocationList.add(loc);
+            }
         }
 
         @Override
