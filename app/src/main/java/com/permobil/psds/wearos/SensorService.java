@@ -63,8 +63,8 @@ public class SensorService extends Service {
     private static final int maxReportingLatency = 3 * 60 * 1000 * 1000; // 3 minutes between sensor updates in microseconds
     private static final int SAVE_TASK_PERIOD_MS = 60 * 1000; // each record will be 1 minute long
     private static final int SEND_TASK_PERIOD_MS = 10 * 1000; // send a record every 10 seconds if possible
-    private static final long LOCATION_LISTENER_MIN_TIME_MS = 5 * 60 * 1000;
-    private static final float LOCATION_LISTENER_MIN_DISTANCE_M = 100;
+    private static final long LOCATION_LISTENER_MIN_TIME_MS = 2 * 60 * 1000;
+    private static final float LOCATION_LISTENER_MIN_DISTANCE_M = 50;
     private static final int MAX_SEND_COUNT = 1;
     private static final int MAX_NUM_ENTRIES_PER_RECORD = 5 * 5 * 60 * 5; // 5 sensors * 5 Hz * 60 seconds * 5 minutes = max length of each log
 
