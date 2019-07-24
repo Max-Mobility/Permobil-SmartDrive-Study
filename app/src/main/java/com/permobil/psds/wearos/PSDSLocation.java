@@ -12,12 +12,16 @@ public class PSDSLocation {
     @Key
     public long time;
 
+    @Key
+    public float speed;
+
     public PSDSLocation() {
     }
 
-    public PSDSLocation(double latitude, double longitude, long time) {
+    public PSDSLocation(double latitude, double longitude, long time, float speed) {
         this.latitude = latitude;
         this.longitude = longitude;
         this.time = time;
+        this.speed = speed;
     }
 }
