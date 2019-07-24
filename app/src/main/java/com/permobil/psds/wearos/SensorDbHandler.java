@@ -79,7 +79,7 @@ public class SensorDbHandler extends SQLiteOpenHelper {
     }
 
     public List<PSDSData> getRecords(int numRecords) {
-        List recordList = new ArrayList();
+        List<PSDSData> recordList = new ArrayList<>();
         String selectQuery = "SELECT * FROM " + TABLE_NAME + " ORDER BY " + KEY_ID + " ASC";
         if (numRecords > 0) {
             selectQuery += " LIMIT " + numRecords;
