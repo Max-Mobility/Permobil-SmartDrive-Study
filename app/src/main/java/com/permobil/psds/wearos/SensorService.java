@@ -364,25 +364,21 @@ public class SensorService extends Service {
                     Log.w(TAG, "Unable to get device location because LOCATION permission has not been granted.");
                     data.location = null;
                 } else if (mLastKnownLocation != null) {
-                    data.location = new PSDSLocation(mLastKnownLocation.getLatitude(), mLastKnownLocation.getLongitude(), mLastKnownLocation.getTime(), mLastKnownLocation.getSpeed());
+                  data.location = new PSDSLocation(mLastKnownLocation);
                 } else {
-                    Location loc;
-                    loc = mLocationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-                    if (loc != null) {
-                        data.location = new PSDSLocation(loc.getLatitude(), loc.getLongitude(), loc.getTime(), loc.getSpeed());
-                    } else {
-                        loc = mLocationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
-                        if (loc != null) {
-                            data.location = new PSDSLocation(loc.getLatitude(), loc.getLongitude(), loc.getTime(), loc.getSpeed());
-                        } else {
-                            loc = mLocationManager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER);
-                            if (loc != null) {
-                                data.location = new PSDSLocation(loc.getLatitude(), loc.getLongitude(), loc.getTime(), loc.getSpeed());
-                            } else {
-                                data.location = null;
-                            }
-                        }
+                  Location loc;
+                  loc = mLocationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+                  if (loc == null) {
+                    loc = mLocationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+                    if (loc == null) {
+                      loc = mLocationManager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER);
                     }
+                  }
+                  if (loc != null) {
+                    data.location = new PSDSLocation(loc);
+                  } else {
+                    data.location = null;
+                  }
                 }
                 Log.d(TAG, "Data location: " + data.location);
 
@@ -425,7 +421,7 @@ public class SensorService extends Service {
             Log.d(TAG, "Got location: " + location);
             mLastKnownLocation = location;
             // TODO: do we need to check if the user has been active here?
-            PSDSLocation loc = new PSDSLocation(location.getLatitude(), location.getLongitude(), location.getTime(), location.getSpeed());
+            PSDSLocation loc = new PSDSLocation(location);
             synchronized (sensorServiceLocationList) {
                 sensorServiceLocationList.add(loc);
             }
